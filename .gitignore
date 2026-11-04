@@ -1,9 +1,4 @@
-*.json
-*.txt
+# Repo-wide ignores only. Each utility keeps its own rules in its own folder (see its .gitignore).
 __pycache__/
 .claude/
-!example-*.json
-*-report.html
-!examples/**/*.json
-!examples/**/*.txt
-!examples/**/*-report.html
+settings.local.json

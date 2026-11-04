@@ -2,6 +2,8 @@
 
 Two PowerShell scripts. The first reads vRA (read only) and writes an import file. The second creates the groups in VCF Automation (VCFA) with the same roles, plus any users whose roles do not come from a group. By default it only shows what it would do; nothing is created until you add `-Apply`.
 
+**Run every command in this guide from this folder.**
+
 **Nothing to install.** Windows PowerShell 5.1 (already on Windows) or PowerShell 7 is enough. Run both scripts from the same folder. Prefer Python? See [Python version](#python-version) at the end; it does the same thing.
 
 | File | What it does |
