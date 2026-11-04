@@ -1,0 +1,51 @@
+{
+  "users": [],
+  "groups": [
+    {
+      "name": "Infra-Admins@corp.example.com",
+      "domain": "corp.example.com",
+      "providerType": "OAUTH",
+      "members": [
+        "olga@corp.example.com",
+        "roy@corp.example.com"
+      ]
+    }
+  ],
+  "roleBindings": [
+    {
+      "principalType": "group",
+      "principal": "Infra-Admins@corp.example.com",
+      "scope": "organization",
+      "role": "Organization Member",
+      "vraRole": "org_member"
+    },
+    {
+      "principalType": "group",
+      "principal": "Infra-Admins@corp.example.com",
+      "scope": "organization",
+      "role": "Assembler Administrator",
+      "vraRole": "automationservice:cloud_admin"
+    },
+    {
+      "principalType": "group",
+      "principal": "Infra-Admins@corp.example.com",
+      "scope": "organization",
+      "role": "Service Broker Administrator",
+      "vraRole": "catalog:admin"
+    },
+    {
+      "principalType": "group",
+      "principal": "Infra-Admins@corp.example.com",
+      "scope": "organization",
+      "role": "Orchestrator Administrator",
+      "vraRole": "orchestration:admin"
+    },
+    {
+      "principalType": "group",
+      "principal": "Infra-Admins@corp.example.com",
+      "scope": "project:Demo-Project",
+      "role": "Project Administrator",
+      "vraRole": "project:administrators"
+    }
+  ]
+}

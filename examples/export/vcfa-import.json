@@ -1,0 +1,201 @@
+{
+    "users":  [
+                  {
+                      "username":  "olga@corp.example.com",
+                      "fullName":  "Olga Levi",
+                      "email":  "olga@corp.example.com",
+                      "domain":  "corp.example.com",
+                      "providerType":  "OAUTH",
+                      "memberOf":  [
+                                       "Infra-Admins@corp.example.com"
+                                   ]
+                  },
+                  {
+                      "username":  "roy@corp.example.com",
+                      "fullName":  "Roy Katz",
+                      "email":  "roy@corp.example.com",
+                      "domain":  "corp.example.com",
+                      "providerType":  "OAUTH",
+                      "memberOf":  [
+                                       "Infra-Admins@corp.example.com"
+                                   ]
+                  },
+                  {
+                      "username":  "dana@corp.example.com",
+                      "fullName":  "Dana Ofer",
+                      "email":  "dana@corp.example.com",
+                      "domain":  "corp.example.com",
+                      "providerType":  "OAUTH"
+                  },
+                  {
+                      "username":  "svc-backup@corp.example.com",
+                      "email":  "svc-backup@corp.example.com",
+                      "domain":  "corp.example.com",
+                      "providerType":  "OAUTH"
+                  },
+                  {
+                      "username":  "admin",
+                      "email":  "admin@example.com",
+                      "domain":  "System Domain",
+                      "providerType":  "LOCAL"
+                  },
+                  {
+                      "username":  "noam@partner.example.net",
+                      "email":  "noam@partner.example.net",
+                      "domain":  "partner.example.net",
+                      "fullName":  "Noam Bar",
+                      "providerType":  "OAUTH"
+                  }
+              ],
+    "groups":  [
+                   {
+                       "name":  "Infra-Admins@corp.example.com",
+                       "domain":  "corp.example.com",
+                       "providerType":  "OAUTH",
+                       "members":  [
+                                       "olga@corp.example.com",
+                                       "roy@corp.example.com"
+                                   ]
+                   },
+                   {
+                       "name":  "Finance-Users@corp.example.com",
+                       "domain":  "corp.example.com",
+                       "providerType":  "OAUTH",
+                       "members":  [
+
+                                   ]
+                   },
+                   {
+                       "name":  "Legacy-Admins@corp.example.com",
+                       "domain":  "corp.example.com",
+                       "providerType":  "OAUTH",
+                       "members":  [
+
+                                   ]
+                   }
+               ],
+    "roleBindings":  [
+                         {
+                             "principalType":  "user",
+                             "principal":  "olga@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Organization Member",
+                             "vraRole":  "org_member"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "olga@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Service Broker User",
+                             "vraRole":  "catalog:user"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "olga@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Assembler Administrator",
+                             "vraRole":  "automationservice:cloud_admin"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "roy@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Organization Member",
+                             "vraRole":  "org_member"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "dana@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Organization Owner",
+                             "vraRole":  "org_owner"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "admin",
+                             "scope":  "organization",
+                             "role":  "Organization Owner",
+                             "vraRole":  "org_owner"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Infra-Admins@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Organization Member",
+                             "vraRole":  "org_member"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Infra-Admins@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Assembler Administrator",
+                             "vraRole":  "automationservice:cloud_admin"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Infra-Admins@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Service Broker Administrator",
+                             "vraRole":  "catalog:admin"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Finance-Users@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Organization Member",
+                             "vraRole":  "org_member"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Finance-Users@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Service Broker User",
+                             "vraRole":  "catalog:user"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Legacy-Admins@corp.example.com",
+                             "scope":  "organization",
+                             "role":  "Organization Member",
+                             "vraRole":  "org_member"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "olga@corp.example.com",
+                             "scope":  "project:Demo-Project",
+                             "role":  "Project Administrator",
+                             "vraRole":  "project:administrators"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "noam@partner.example.net",
+                             "scope":  "project:Demo-Project",
+                             "role":  "Project User",
+                             "vraRole":  "project:members"
+                         },
+                         {
+                             "principalType":  "group",
+                             "principal":  "Finance-Users@corp.example.com",
+                             "scope":  "project:Demo-Project",
+                             "role":  "Project User",
+                             "vraRole":  "project:members"
+                         },
+                         {
+                             "principalType":  "user",
+                             "principal":  "noam@partner.example.net",
+                             "scope":  "organization",
+                             "role":  "Organization Member",
+                             "vraRole":  "org_member"
+                         }
+                     ],
+    "unresolvedProjectUsers":  [
+                                   "ghost"
+                               ],
+    "projectOnlyUsers":  [
+                             "noam@partner.example.net"
+                         ],
+    "warnings":  [
+                     "unmapped role \u0027migration:admin\u0027 for user \u0027dana@corp.example.com\u0027 (organization)",
+                     "project member \u0027ghost\u0027 not found among vRA users (domain unknown): not imported"
+                 ]
+}

@@ -1,0 +1,182 @@
+{
+    "creates":  [
+                    {
+                        "type":  "user",
+                        "path":  "/cloudapi/1.0.0/users",
+                        "body":  {
+                                     "username":  "olga@corp.example.com",
+                                     "enabled":  true,
+                                     "providerType":  "OAUTH",
+                                     "roleEntityRefs":  [
+                                                            {
+                                                                "name":  "Assembler Administrator",
+                                                                "id":  "urn:vcloud:role:3"
+                                                            },
+                                                            {
+                                                                "name":  "Organization Member",
+                                                                "id":  "urn:vcloud:role:2"
+                                                            },
+                                                            {
+                                                                "name":  "Service Broker User",
+                                                                "id":  "urn:vcloud:role:5"
+                                                            }
+                                                        ],
+                                     "inheritGroupRoles":  true
+                                 }
+                    },
+                    {
+                        "type":  "user",
+                        "path":  "/cloudapi/1.0.0/users",
+                        "body":  {
+                                     "username":  "dana@corp.example.com",
+                                     "enabled":  true,
+                                     "providerType":  "OAUTH",
+                                     "roleEntityRefs":  [
+                                                            {
+                                                                "name":  "Organization Owner",
+                                                                "id":  "urn:vcloud:role:1"
+                                                            }
+                                                        ],
+                                     "inheritGroupRoles":  true
+                                 }
+                    },
+                    {
+                        "type":  "user",
+                        "path":  "/cloudapi/1.0.0/users",
+                        "body":  {
+                                     "username":  "noam@partner.example.net",
+                                     "enabled":  true,
+                                     "providerType":  "OAUTH",
+                                     "roleEntityRefs":  [
+                                                            {
+                                                                "name":  "Organization Member",
+                                                                "id":  "urn:vcloud:role:2"
+                                                            }
+                                                        ],
+                                     "inheritGroupRoles":  true
+                                 }
+                    },
+                    {
+                        "type":  "group",
+                        "path":  "/cloudapi/1.0.0/groups",
+                        "body":  {
+                                     "name":  "Infra-Admins@corp.example.com",
+                                     "providerType":  "OAUTH",
+                                     "roleEntityRefs":  [
+                                                            {
+                                                                "name":  "Assembler Administrator",
+                                                                "id":  "urn:vcloud:role:3"
+                                                            },
+                                                            {
+                                                                "name":  "Organization Member",
+                                                                "id":  "urn:vcloud:role:2"
+                                                            },
+                                                            {
+                                                                "name":  "Service Broker Administrator",
+                                                                "id":  "urn:vcloud:role:4"
+                                                            }
+                                                        ],
+                                     "description":  ""
+                                 }
+                    },
+                    {
+                        "type":  "group",
+                        "path":  "/cloudapi/1.0.0/groups",
+                        "body":  {
+                                     "name":  "Finance-Users@corp.example.com",
+                                     "providerType":  "OAUTH",
+                                     "roleEntityRefs":  [
+                                                            {
+                                                                "name":  "Organization Member",
+                                                                "id":  "urn:vcloud:role:2"
+                                                            },
+                                                            {
+                                                                "name":  "Service Broker User",
+                                                                "id":  "urn:vcloud:role:5"
+                                                            }
+                                                        ],
+                                     "description":  ""
+                                 }
+                    },
+                    {
+                        "type":  "group",
+                        "path":  "/cloudapi/1.0.0/groups",
+                        "body":  {
+                                     "name":  "Legacy-Admins@corp.example.com",
+                                     "providerType":  "OAUTH",
+                                     "roleEntityRefs":  [
+                                                            {
+                                                                "name":  "Organization Member",
+                                                                "id":  "urn:vcloud:role:2"
+                                                            }
+                                                        ],
+                                     "description":  ""
+                                 }
+                    }
+                ],
+    "updates":  [
+
+                ],
+    "skipped":  [
+                    {
+                        "type":  "user",
+                        "name":  "admin",
+                        "reason":  "local user: needs a password, create manually"
+                    }
+                ],
+    "missingRoles":  {
+
+                     },
+    "directUsers":  {
+                        "olga@corp.example.com":  [
+                                                      "Service Broker User"
+                                                  ],
+                        "dana@corp.example.com":  [
+                                                      "Organization Owner"
+                                                  ],
+                        "admin":  [
+                                      "Organization Owner"
+                                  ],
+                        "noam@partner.example.net":  [
+                                                         "Organization Member"
+                                                     ]
+                    },
+    "localUsersWithRoles":  [
+                                {
+                                    "name":  "admin",
+                                    "roles":  [
+                                                  "Organization Owner"
+                                              ]
+                                }
+                            ],
+    "roleMapping":  {
+                        "Organization Member":  "Organization Member",
+                        "Service Broker User":  "Service Broker User",
+                        "Assembler Administrator":  "Assembler Administrator",
+                        "Organization Owner":  "Organization Owner",
+                        "Service Broker Administrator":  "Service Broker Administrator"
+                    },
+    "missingByPrincipal":  {
+
+                           },
+    "projectBindingsNotHandled":  3,
+    "projectBindings":  {
+                            "project:Demo-Project":  [
+                                                         {
+                                                             "type":  "user",
+                                                             "principal":  "olga@corp.example.com",
+                                                             "role":  "Project Administrator"
+                                                         },
+                                                         {
+                                                             "type":  "user",
+                                                             "principal":  "noam@partner.example.net",
+                                                             "role":  "Project User"
+                                                         },
+                                                         {
+                                                             "type":  "group",
+                                                             "principal":  "Finance-Users@corp.example.com",
+                                                             "role":  "Project User"
+                                                         }
+                                                     ]
+                        }
+}

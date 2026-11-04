@@ -1,0 +1,19 @@
+Logging in to https://vra.example.com ...
+LOGIN OK. Org: acme-org-id
+Fetching users ...
+  5/6 users in selected domains via /csp/gateway/am/api/v2/orgs/acme-org-id/users
+Fetching groups ...
+  /csp/gateway/am/api/v2/orgs/acme-org-id/groups -> 404
+  3/3 groups in selected domains via /csp/gateway/am/api/orgs/acme-org-id/groups
+  WARNING: the member list of 1 group(s) could not be read: Legacy-Admins@corp.example.com. Users in them may later be loaded as 'not inherited from a group'.
+  domains seen: System Domain, corp.example.com, partner.example.net
+Fetching projects ...
+  1 projects
+  1 project users not found among vRA users: ghost
+  1 users have project access but no org role or group; added to the import
+Wrote C:\exports\acme\vra-export.json
+Wrote C:\exports\acme\vcfa-import.json
+Wrote C:\exports\acme\users.json
+Wrote C:\exports\acme\groups.json
+2 warnings (unmapped roles) - see vcfa-import.json
+Report: C:\exports\acme\vra-export-report.html

@@ -1,0 +1,49 @@
+[
+    {
+        "id":  "g1",
+        "name":  "Infra-Admins@corp.example.com",
+        "domain":  "corp.example.com",
+        "groupType":  "AD_GROUP",
+        "members":  [
+                        "olga@corp.example.com",
+                        "roy@corp.example.com"
+                    ],
+        "organizationRoles":  [
+                                  "org_member"
+                              ],
+        "serviceRoles":  [
+                             "automationservice:cloud_admin",
+                             "catalog:admin"
+                         ]
+    },
+    {
+        "id":  "g2",
+        "name":  "Finance-Users@corp.example.com",
+        "domain":  "corp.example.com",
+        "groupType":  "AD_GROUP",
+        "members":  [
+
+                    ],
+        "organizationRoles":  [
+                                  "org_member"
+                              ],
+        "serviceRoles":  [
+                             "catalog:user"
+                         ]
+    },
+    {
+        "id":  "g3",
+        "name":  "Legacy-Admins@corp.example.com",
+        "domain":  "corp.example.com",
+        "groupType":  "AD_GROUP",
+        "members":  [
+
+                    ],
+        "organizationRoles":  [
+                                  "org_member"
+                              ],
+        "serviceRoles":  [
+
+                         ]
+    }
+]

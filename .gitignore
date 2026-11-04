@@ -2,3 +2,8 @@
 *.txt
 __pycache__/
 .claude/
+!example-*.json
+*-report.html
+!examples/**/*.json
+!examples/**/*.txt
+!examples/**/*-report.html
