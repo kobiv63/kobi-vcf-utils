@@ -1,6 +1,6 @@
 # kobi-vcf-utils
 
-A repo of small, independent utilities. Each one has its own folder, and the real notes live there: read that folder's `CLAUDE.md` before changing it (for example `vra-vcfa-user-roles-migration/CLAUDE.md`).
+A repo of small, independent utilities. Each one has its own folder, and the real notes live there: read that folder's `CLAUDE.md` before changing it (for example `vra-vcfa-identity-migration/CLAUDE.md`).
 
 ## Conventions
 

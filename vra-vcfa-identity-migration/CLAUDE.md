@@ -1,4 +1,4 @@
-# vra-vcfa-user-roles-migration: vRA 8 identity to VCFA
+# vra-vcfa-identity-migration: vRA 8 identity to VCFA
 
 One utility in the `kobi-vcf-utils` repo (see the root `CLAUDE.md` for repo conventions). Run every command and test below from this folder.
 
