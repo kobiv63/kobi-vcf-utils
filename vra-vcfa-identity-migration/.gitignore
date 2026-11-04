@@ -1,0 +1,10 @@
+# Exports hold real user names and token captures hold live sessions: never commit them.
+*.json
+*.txt
+*-report.html
+
+# ...except the samples that are committed on purpose (made-up data only)
+!example-*.json
+!examples/**/*.json
+!examples/**/*.txt
+!examples/**/*-report.html

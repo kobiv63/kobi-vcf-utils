@@ -1,0 +1,206 @@
+{
+    "meta":  {
+                 "host":  "https://vra.example.com",
+                 "orgId":  "acme-org-id",
+                 "exportedAt":  "2026-11-04T20:41:44.6455913Z",
+                 "userEndpoint":  "/csp/gateway/am/api/v2/orgs/acme-org-id/users",
+                 "groupEndpoint":  "/csp/gateway/am/api/orgs/acme-org-id/groups"
+             },
+    "users":  [
+                  {
+                      "user":  {
+                                   "username":  "olga",
+                                   "firstName":  "Olga",
+                                   "lastName":  "Levi",
+                                   "domain":  "corp.example.com",
+                                   "email":  "olga@corp.example.com",
+                                   "userId":  "u1"
+                               },
+                      "organizationRoles":  [
+                                                {
+                                                    "name":  "org_member"
+                                                }
+                                            ],
+                      "serviceRoles":  [
+                                           {
+                                               "serviceRoles":  [
+                                                                    {
+                                                                        "name":  "catalog:user"
+                                                                    },
+                                                                    {
+                                                                        "name":  "automationservice:cloud_admin"
+                                                                    }
+                                                                ]
+                                           }
+                                       ]
+                  },
+                  {
+                      "user":  {
+                                   "username":  "roy",
+                                   "firstName":  "Roy",
+                                   "lastName":  "Katz",
+                                   "domain":  "corp.example.com",
+                                   "email":  "roy@corp.example.com",
+                                   "userId":  "u2"
+                               },
+                      "organizationRoles":  [
+                                                {
+                                                    "name":  "org_member"
+                                                }
+                                            ],
+                      "serviceRoles":  [
+
+                                       ]
+                  },
+                  {
+                      "user":  {
+                                   "username":  "dana",
+                                   "firstName":  "Dana",
+                                   "lastName":  "Ofer",
+                                   "domain":  "corp.example.com",
+                                   "email":  "dana@corp.example.com",
+                                   "userId":  "u3"
+                               },
+                      "organizationRoles":  [
+                                                {
+                                                    "name":  "org_owner"
+                                                },
+                                                {
+                                                    "name":  "migration:admin"
+                                                }
+                                            ],
+                      "serviceRoles":  [
+
+                                       ]
+                  },
+                  {
+                      "user":  {
+                                   "username":  "svc-backup",
+                                   "domain":  "corp.example.com",
+                                   "email":  "svc-backup@corp.example.com",
+                                   "userId":  "u4"
+                               },
+                      "organizationRoles":  [
+
+                                            ],
+                      "serviceRoles":  [
+
+                                       ]
+                  },
+                  {
+                      "user":  {
+                                   "username":  "admin",
+                                   "domain":  "System Domain",
+                                   "email":  "admin@example.com",
+                                   "userId":  "u6"
+                               },
+                      "organizationRoles":  [
+                                                {
+                                                    "name":  "org_owner"
+                                                }
+                                            ],
+                      "serviceRoles":  [
+
+                                       ]
+                  }
+              ],
+    "groups":  [
+                   {
+                       "domain":  "corp.example.com",
+                       "id":  "g1",
+                       "groupType":  "AD_GROUP",
+                       "serviceRoles":  [
+                                            {
+                                                "serviceRoleNames":  [
+                                                                         "automationservice:cloud_admin",
+                                                                         "catalog:admin"
+                                                                     ]
+                                            }
+                                        ],
+                       "members":  [
+                                       {
+                                           "userId":  "u1",
+                                           "username":  "olga",
+                                           "domain":  "corp.example.com",
+                                           "email":  "olga@corp.example.com"
+                                       },
+                                       {
+                                           "userId":  "u2",
+                                           "username":  "roy",
+                                           "domain":  "corp.example.com",
+                                           "email":  "roy@corp.example.com"
+                                       }
+                                   ],
+                       "organizationRoles":  [
+                                                 {
+                                                     "name":  "org_member"
+                                                 }
+                                             ],
+                       "displayName":  "Infra-Admins@corp.example.com"
+                   },
+                   {
+                       "domain":  "corp.example.com",
+                       "id":  "g2",
+                       "groupType":  "AD_GROUP",
+                       "serviceRoles":  [
+                                            {
+                                                "serviceRoleNames":  [
+                                                                         "catalog:user"
+                                                                     ]
+                                            }
+                                        ],
+                       "members":  [
+
+                                   ],
+                       "organizationRoles":  [
+                                                 {
+                                                     "name":  "org_member"
+                                                 }
+                                             ],
+                       "displayName":  "Finance-Users@corp.example.com"
+                   },
+                   {
+                       "domain":  "corp.example.com",
+                       "id":  "g3",
+                       "groupType":  "AD_GROUP",
+                       "serviceRoles":  [
+
+                                        ],
+                       "members":  [
+
+                                   ],
+                       "organizationRoles":  [
+                                                 {
+                                                     "name":  "org_member"
+                                                 }
+                                             ],
+                       "displayName":  "Legacy-Admins@corp.example.com"
+                   }
+               ],
+    "projects":  [
+                     {
+                         "id":  "p1",
+                         "name":  "Demo-Project",
+                         "administrators":  [
+                                                {
+                                                    "email":  "olga",
+                                                    "type":  "user"
+                                                }
+                                            ],
+                         "members":  [
+                                         {
+                                             "email":  "noam",
+                                             "type":  "user"
+                                         },
+                                         {
+                                             "email":  "ghost",
+                                             "type":  "user"
+                                         },
+                                         {
+                                             "email":  "Finance-Users@corp.example.com",
+                                             "type":  "group"
+                                         }
+                                     ]
+                     }
+                 ]
+}

@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vRA to VCFA migration report</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #1c2330; --muted: #5d6879; --line: #e1e5eb; --head: #eef1f5;
+    --ok: #137a3f; --ok-bg: #e4f5ea; --warn: #8a5a00; --warn-bg: #fff2d6; --bad: #b3261e; --bad-bg: #fde8e6;
+    --info: #1b5fb4; --info-bg: #e3eefb; --idle: #5d6879; --idle-bg: #eceff3; --accent: #1b5fb4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161d; --card: #1a202a; --ink: #e6eaf0; --muted: #98a3b4; --line: #2b3441; --head: #222a36;
+      --ok: #6fd69a; --ok-bg: #16301f; --warn: #f0c36a; --warn-bg: #36290c; --bad: #ff9b93; --bad-bg: #3b1916;
+      --info: #8bb8f5; --info-bg: #14263d; --idle: #98a3b4; --idle-bg: #232b37; --accent: #8bb8f5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
+  header { padding: 28px 0 8px; }
+  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .banner { margin: 18px 0 6px; padding: 14px 18px; border-radius: 10px; border: 1px solid var(--line); display: flex; gap: 14px; align-items: center; }
+  .banner .big { font-size: 18px; font-weight: 700; }
+  .banner .sub { color: var(--muted); font-size: 14px; }
+  .banner.ok { background: var(--ok-bg); border-color: transparent; } .banner.ok .big { color: var(--ok); }
+  .banner.warn { background: var(--warn-bg); border-color: transparent; } .banner.warn .big { color: var(--warn); }
+  .banner.bad { background: var(--bad-bg); border-color: transparent; } .banner.bad .big { color: var(--bad); }
+  .banner.info { background: var(--info-bg); border-color: transparent; } .banner.info .big { color: var(--info); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--idle); }
+  .banner.ok .dot { background: var(--ok); } .banner.warn .dot { background: var(--warn); }
+  .banner.bad .dot { background: var(--bad); } .banner.info .dot { background: var(--info); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 14px 0 6px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .tile .n { font-size: 28px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile .l { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .tile .s { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .tile.warn .n { color: var(--warn); } .tile.bad .n { color: var(--bad); } .tile.ok .n { color: var(--ok); }
+  details.sec { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 16px 0; overflow: hidden; }
+  details.sec > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; align-items: baseline; gap: 10px; }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary::before { content: "\25B8"; color: var(--muted); font-size: 12px; transition: transform .12s; }
+  details.sec[open] > summary::before { transform: rotate(90deg); }
+  details.sec h2 { font-size: 16px; margin: 0; }
+  details.sec .hint { color: var(--muted); font-size: 13px; }
+  .count { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .body { padding: 0 18px 16px; }
+  .attn { border-left: 4px solid var(--line); padding: 10px 14px; margin: 10px 0; border-radius: 6px; background: var(--head); }
+  .attn.warn { border-color: var(--warn); } .attn.bad { border-color: var(--bad); } .attn.info { border-color: var(--info); }
+  .attn h3 { margin: 0 0 4px; font-size: 14px; }
+  .attn ul { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+  .attn ul li { margin: 1px 0; word-break: break-word; }
+  .attn .more { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .search { margin: 0 0 10px; width: 100%; max-width: 340px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 14px; }
+  .scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th { position: sticky; top: 0; background: var(--head); text-align: left; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.name { min-width: 230px; overflow-wrap: anywhere; word-break: normal; font-weight: 500; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); } .pill.info { background: var(--info-bg); color: var(--info); }
+  .pill.idle { background: var(--idle-bg); color: var(--idle); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { background: var(--head); border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; font-size: 12px; white-space: nowrap; }
+  .chip.extra { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
+  .chip.gone { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); padding: 6px 0; font-size: 14px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  @media print { body { background: #fff; } details.sec { break-inside: avoid; } .scroll { max-height: none; overflow: visible; } .search { display: none; } }
+  @media (max-width: 600px) { .banner { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header id="head"></header>
+  <main id="app"></main>
+  <footer id="foot"></footer>
+</div>
+<script id="report-data" type="application/json">/*REPORT_DATA*/null</script>
+<script>
+(function () {
+  var DATA = JSON.parse(document.getElementById('report-data').textContent);
+  var app = document.getElementById('app'), head = document.getElementById('head'), foot = document.getElementById('foot');
+
+  // Everything is built with textContent, never innerHTML, so names from the data cannot inject markup.
+  function el(tag, cls, kids) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    (kids == null ? [] : [].concat(kids)).forEach(function (k) {
+      if (k == null || k === false) return;
+      e.appendChild(typeof k === 'object' ? k : document.createTextNode(String(k)));
+    });
+    return e;
+  }
+  function pill(text, tone) { return el('span', 'pill ' + (tone || 'idle'), text); }
+  function chips(list, cls) {
+    if (!list || !list.length) return el('span', 'muted', '—');
+    return el('div', 'chips', list.map(function (t) { return el('span', 'chip' + (cls ? ' ' + cls : ''), t); }));
+  }
+  function tile(n, label, tone, sub) {
+    return el('div', 'tile' + (tone ? ' ' + tone : ''), [el('div', 'n', n), el('div', 'l', label), sub ? el('div', 's', sub) : null]);
+  }
+  function banner(tone, big, sub) {
+    return el('div', 'banner ' + tone, [el('span', 'dot'), el('div', null, [el('div', 'big', big), el('div', 'sub', sub)])]);
+  }
+  function section(title, hint, count, content, open) {
+    var det = el('details', 'sec');
+    if (open) det.open = true;
+    det.appendChild(el('summary', null, [el('h2', null, title), hint ? el('span', 'hint', hint) : null, count == null ? null : el('span', 'count', count)]));
+    det.appendChild(el('div', 'body', content));
+    return det;
+  }
+  function table(cols, rows, searchable) {
+    if (!rows.length) return el('div', 'empty', 'Nothing to show.');
+    var t = el('table'); var tr = el('tr');
+    cols.forEach(function (c) { tr.appendChild(el('th', c.num ? 'num' : '', c.label)); });
+    t.appendChild(el('thead', null, tr));
+    var tb = el('tbody');
+    rows.forEach(function (r) {
+      var row = el('tr'); row._text = '';
+      cols.forEach(function (c, i) {
+        var v = r[i]; var td = el('td', (c.num ? 'num ' : '') + (c.name ? 'name' : ''), v);
+        row.appendChild(td); row._text += ' ' + td.textContent.toLowerCase();
+      });
+      tb.appendChild(row);
+    });
+    t.appendChild(tb);
+    var box = el('div');
+    if (searchable) {
+      var inp = el('input', 'search'); inp.type = 'search'; inp.placeholder = 'Filter (' + rows.length + ' rows)';
+      inp.addEventListener('input', function () {
+        var q = inp.value.trim().toLowerCase();
+        [].forEach.call(tb.children, function (row) { row.style.display = !q || row._text.indexOf(q) >= 0 ? '' : 'none'; });
+      });
+      box.appendChild(inp);
+    }
+    box.appendChild(el('div', 'scroll', t));
+    return box;
+  }
+  function attention(items) {
+    if (!items.length) return el('div', 'empty', 'Nothing needs your attention.');
+    return el('div', null, items.map(function (a) {
+      var shown = (a.items || []).slice(0, 12), more = (a.items || []).length - shown.length;
+      return el('div', 'attn ' + (a.tone || 'info'), [
+        el('h3', null, a.title),
+        shown.length ? el('ul', null, shown.map(function (x) { return el('li', null, x); })) : null,
+        more > 0 ? el('div', 'more', '+ ' + more + ' more (see the tables below)') : null
+      ]);
+    }));
+  }
+  function when(iso) { try { return new Date(iso).toLocaleString(); } catch (e) { return iso; } }
+  function actionPill(a) { return pill(a, a === 'create' ? 'info' : a === 'add roles' ? 'warn' : 'idle'); }
+  function resultPill(r) {
+    var t = r === 'created' || r === 'updated' ? 'ok' : /^failed/.test(r) ? 'bad' : r === 'not applied' ? 'warn' : 'idle';
+    return pill(r, t);
+  }
+
+  // ------------------------------------------------------------------ export
+  function renderExport(D) {
+    var c = D.counts;
+    head.appendChild(el('h1', null, 'vRA export report'));
+    head.appendChild(el('div', 'meta', [
+      el('span', null, ['Source ', el('b', null, D.host)]), el('span', null, ['Org ', el('b', null, D.org)]),
+      el('span', null, ['Exported ', el('b', null, when(D.generatedAt))]), el('span', null, ['Tool ', el('b', null, D.tool)])
+    ]));
+    var needs = D.attention.filter(function (a) { return a.tone !== 'info'; }).length;
+    head.appendChild(needs
+      ? banner('warn', 'Export complete — ' + needs + ' item' + (needs > 1 ? 's' : '') + ' to review', 'Nothing was changed in vRA. See "Needs your attention" below.')
+      : banner('ok', 'Export complete', 'Nothing was changed in vRA. Nothing needs your attention.'));
+    app.appendChild(el('div', 'tiles', [
+      tile(c.usersInImport, 'Users in import file', '', c.users + ' org users in the selected domains' + (c.usersAll !== c.users ? ' (of ' + c.usersAll + ' in vRA)' : '') + '; the rest are group members or project-only'),
+      tile(c.groups, 'Groups exported', '', c.groupsAll !== c.groups ? 'of ' + c.groupsAll + ' in vRA' : 'all domains'),
+      tile(c.projects, 'Projects recorded', '', 'recorded only, never loaded'),
+      tile(c.bindings, 'Role bindings', '', 'org and project'),
+      tile(c.warnings, 'Warnings', c.warnings ? 'warn' : 'ok', c.warnings ? 'roles with no VCFA equivalent' : 'every role mapped')
+    ]));
+    app.appendChild(section('Needs your attention', 'Review these before loading', D.attention.length, attention(D.attention), true));
+    app.appendChild(section('Role mapping', 'How each vRA role becomes a VCFA role', D.roleMapping.length,
+      table([{ label: 'vRA role' }, { label: 'becomes VCFA role' }, { label: 'Scope' }, { label: 'Bindings', num: true }],
+        D.roleMapping.map(function (r) { return [r.vraRole, r.role ? r.role : pill('no VCFA equivalent', 'bad'), r.scope, r.bindings]; })),
+      D.roleMapping.some(function (r) { return !r.role; })));
+    app.appendChild(section('Groups', 'Exported groups and the roles they carry', D.groups.length,
+      table([{ label: 'Group', name: 1 }, { label: 'Domain' }, { label: 'Members', num: true }, { label: 'Roles' }],
+        D.groups.map(function (g) { return [g.name, g.domain, g.members, chips(g.roles)]; }), true), false));
+    app.appendChild(section('Users', 'Exported users, their groups and their own roles', D.users.length,
+      table([{ label: 'User', name: 1 }, { label: 'Domain' }, { label: 'Member of' }, { label: 'Own roles' }, { label: 'Note' }],
+        D.users.map(function (u) { return [u.name, u.domain, chips(u.memberOf), chips(u.roles), u.projectOnly ? pill('project access only', 'info') : '']; }), true), false));
+    app.appendChild(section('Projects', 'Recorded for reference; project membership is never loaded', D.projects.length,
+      table([{ label: 'Project', name: 1 }, { label: 'Administrators', num: true }, { label: 'Members', num: true }, { label: 'Viewers', num: true }, { label: 'Supervisors', num: true }],
+        D.projects.map(function (p) { return [p.name, p.administrators, p.members, p.viewers, p.supervisors]; }), true), false));
+    app.appendChild(section('Scope and files', 'What was exported and where it was written', null, el('div', null, [
+      el('p', null, ['Domains in the export: ', chips(D.domainsSelected.length ? D.domainsSelected : ['all']), el('br'), 'Domains seen in vRA: ', chips(D.domainsSeen)]),
+      el('p', null, ['VCFA sign-in type for directory users and groups: ', el('b', null, D.providerType)]),
+      el('p', null, ['API endpoints used: ', el('span', 'muted', (D.endpoints.users || '?') + '  ·  ' + (D.endpoints.groups || '?'))]),
+      el('p', null, ['Files written to ', el('b', null, D.outputDir), ':']),
+      el('ul', null, D.files.map(function (f) { return el('li', null, f); }))
+    ]), false));
+  }
+
+  // ------------------------------------------------------------------ load
+  var MODE = {
+    free: 'Groups, plus users whose roles are not inherited from a group',
+    none: 'Groups only (no users)',
+    all: 'Groups and every user'
+  };
+  function renderLoad(D) {
+    var c = D.counts;
+    head.appendChild(el('h1', null, 'VCFA load report'));
+    head.appendChild(el('div', 'meta', [
+      el('span', null, ['Target ', el('b', null, D.host)]), el('span', null, ['Org ', el('b', null, D.org)]),
+      el('span', null, ['Run ', el('b', null, when(D.generatedAt))]), el('span', null, ['Import file ', el('b', null, D.importFile)]),
+      el('span', null, ['Tool ', el('b', null, D.tool)])
+    ]));
+    var bad = D.failures.length || (D.roleCheck && D.roleCheck.mismatches.length);
+    if (D.mode === 'dry-run') head.appendChild(banner('info', 'Dry run — nothing was changed in VCFA', 'This is the plan. Run again with apply to create these objects.'));
+    else if (D.mode === 'blocked') head.appendChild(banner('bad', 'Not applied — nothing was changed in VCFA', 'The run was stopped because roles are missing in VCFA. See "Needs your attention".'));
+    else head.appendChild(bad
+      ? banner('warn', 'Applied with problems', c.created + ' created, ' + c.failed + ' failed' + (D.roleCheck ? ', role check ' + D.roleCheck.matched + '/' + D.roleCheck.total : '') + '. See "Needs your attention".')
+      : banner('ok', 'Applied successfully', c.created + ' created' + (c.updated ? ', ' + c.updated + ' updated' : '') + (D.roleCheck ? '; role check ' + D.roleCheck.matched + '/' + D.roleCheck.total + ' match vRA' : '') + '.'));
+    var applied = D.mode === 'applied';
+    app.appendChild(el('div', 'tiles', [
+      tile(c.groups, applied ? 'Groups' : 'Groups to create', ''),
+      tile(c.users, applied ? 'Users' : 'Users to create', '', MODE[D.userMode]),
+      tile(c.updates, 'Existing objects to update', '', 'missing roles added; none removed'),
+      tile(c.notLoaded, 'Users not loaded', '', 'no roles, or roles come from groups'),
+      applied ? tile(c.failed + c.updateFailed, 'Failed', (c.failed + c.updateFailed) ? 'bad' : 'ok') : tile(D.localUsers.length, 'Local users to create by hand', D.localUsers.length ? 'warn' : '', 'they need passwords'),
+      D.roleCheck ? tile(D.roleCheck.matched + '/' + D.roleCheck.total, 'Role check', D.roleCheck.mismatches.length ? 'bad' : 'ok', 'objects with the same roles as vRA') : null
+    ]));
+    var attn = [];
+    if (D.blocked.length) attn.push({ tone: 'bad', title: D.blocked.length + ' object(s) would get fewer roles than in vRA because the role does not exist in VCFA', items: D.blocked.map(function (b) { return b.name + ' — missing: ' + b.roles.join(', '); }) });
+    if (D.missingRoles.length) attn.push({ tone: 'bad', title: 'Roles that do not exist in VCFA', items: D.missingRoles.map(function (m) { return m.role + ' (' + m.count + ' use)'; }) });
+    if (D.failures.length) attn.push({ tone: 'bad', title: D.failures.length + ' request(s) failed', items: D.failures.map(function (f) { return f.type + ' ' + f.name + ' — ' + f.detail; }) });
+    if (D.roleCheck && D.roleCheck.mismatches.length) attn.push({ tone: 'bad', title: 'Role check found differences from vRA', items: D.roleCheck.mismatches.map(function (m) { return m.type + ' ' + m.name + ' — ' + m.problem; }) });
+    if (D.localUsers.length) attn.push({ tone: 'warn', title: 'Local users with roles are not created (they need passwords) — create them by hand in VCFA', items: D.localUsers.map(function (u) { return u.name + ' (' + u.roles.join(', ') + ')'; }) });
+    if (D.projects.length) attn.push({ tone: 'info', title: 'Project roles are recorded in the export but never loaded', items: D.projects.map(function (p) { return p.project + ' — ' + p.bindings + ' binding(s)'; }) });
+    app.appendChild(section('Needs your attention', 'Review these first', attn.length, attention(attn), true));
+    app.appendChild(section('Role mapping', 'Role in the import file → role in VCFA', D.roleMapping.length,
+      table([{ label: 'Role in import file' }, { label: 'VCFA role' }, { label: 'Status' }],
+        D.roleMapping.map(function (r) { return [r.source, r.target || '—', r.target ? pill('found', 'ok') : pill('not in VCFA', 'bad')]; })),
+      D.roleMapping.some(function (r) { return !r.target; })));
+    app.appendChild(section('Groups', 'Groups in this run', D.groups.length,
+      table([{ label: 'Group', name: 1 }, { label: 'Roles' }, { label: 'Action' }, { label: 'Result' }],
+        D.groups.map(function (g) { return [g.name, chips(g.roles), actionPill(g.action), resultPill(g.result)]; }), true), true));
+    app.appendChild(section('Users', 'Loaded because some of their roles are not inherited from a group', D.users.length,
+      table([{ label: 'User', name: 1 }, { label: 'Roles their groups do not give them' }, { label: 'All roles' }, { label: 'Action' }, { label: 'Result' }],
+        D.users.map(function (u) { return [u.name, chips(u.notInherited, 'extra'), chips(u.roles), actionPill(u.action), resultPill(u.result)]; }), true), D.users.length > 0 && D.users.length <= 25));
+    app.appendChild(section('Users not loaded', 'These sign in through their group and are created by VCFA at first login', D.notLoaded.length,
+      table([{ label: 'User', name: 1 }, { label: 'Why not' }], D.notLoaded.map(function (u) { return [u.name, u.reason]; }), true), false));
+    app.appendChild(section('Already in VCFA', 'Skipped because they exist (missing roles are still added)', D.skipped.length,
+      table([{ label: 'Type' }, { label: 'Name', name: 1 }, { label: 'Reason' }], D.skipped.map(function (s) { return [s.type, s.name, s.reason]; }), true), false));
+    foot.appendChild(el('div', null, 'VCFA had ' + D.vcfa.roles + ' roles, ' + D.vcfa.users + ' users and ' + D.vcfa.groups + ' groups before this run. Users in this run: ' + MODE[D.userMode] + '.'));
+  }
+
+  if (!DATA) { app.appendChild(el('p', null, 'No report data was embedded in this file.')); return; }
+  document.title = (DATA.kind === 'export' ? 'vRA export report' : 'VCFA load report') + ' — ' + (DATA.org || '');
+  (DATA.kind === 'export' ? renderExport : renderLoad)(DATA);
+  foot.appendChild(el('div', null, 'This report contains user and group names from your environment. Do not share it outside the engagement.'));
+})();
+</script>
+</body>
+</html>

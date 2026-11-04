@@ -1,0 +1,18 @@
+Logging in to https://vcfa.example.com with the browser session token ...
+LOGIN OK. Org: name=acme id=urn:vcloud:org:acme-1234  roles on session: Organization Administrator
+VCFA has 5 roles, 0 users, 0 groups
+Plan: create 3 users, 3 groups; skip 1; add roles to 0 existing
+Users loaded because their roles are not inherited from a group: 3 (dana@corp.example.com: Organization Owner; noam@partner.example.net: Organization Member; olga@corp.example.com: Service Broker User)
+Local users with roles are NOT created (they need passwords); create them by hand in VCFA: admin (Organization Owner)
+Role mapping (role in the import file -> VCFA role):
+  Assembler Administrator -> Assembler Administrator
+  Organization Member -> Organization Member
+  Organization Owner -> Organization Owner
+  Service Broker Administrator -> Service Broker Administrator
+  Service Broker User -> Service Broker User
+Project roles (3 in 1 projects) are only recorded in the export, never loaded; listed under projectBindings in vcfa-plan.json
+VCFA role names available: Assembler Administrator, Organization Member, Organization Owner, Service Broker Administrator, Service Broker User
+Done: 6 created, 0 failed
+Role check: 6/6 objects have the same org/service roles as in vRA
+Report: C:\exports\acme\vcfa-load-report.html
+Note: 3 project role bindings are recorded only; this script does not load projects.

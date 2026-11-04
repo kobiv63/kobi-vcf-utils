@@ -1,0 +1,70 @@
+[
+    {
+        "id":  "u1",
+        "username":  "olga",
+        "domain":  "corp.example.com",
+        "email":  "olga@corp.example.com",
+        "firstName":  "Olga",
+        "lastName":  "Levi",
+        "organizationRoles":  [
+                                  "org_member"
+                              ],
+        "serviceRoles":  [
+                             "catalog:user",
+                             "automationservice:cloud_admin"
+                         ]
+    },
+    {
+        "id":  "u2",
+        "username":  "roy",
+        "domain":  "corp.example.com",
+        "email":  "roy@corp.example.com",
+        "firstName":  "Roy",
+        "lastName":  "Katz",
+        "organizationRoles":  [
+                                  "org_member"
+                              ],
+        "serviceRoles":  [
+
+                         ]
+    },
+    {
+        "id":  "u3",
+        "username":  "dana",
+        "domain":  "corp.example.com",
+        "email":  "dana@corp.example.com",
+        "firstName":  "Dana",
+        "lastName":  "Ofer",
+        "organizationRoles":  [
+                                  "org_owner",
+                                  "migration:admin"
+                              ],
+        "serviceRoles":  [
+
+                         ]
+    },
+    {
+        "id":  "u4",
+        "username":  "svc-backup",
+        "domain":  "corp.example.com",
+        "email":  "svc-backup@corp.example.com",
+        "organizationRoles":  [
+
+                              ],
+        "serviceRoles":  [
+
+                         ]
+    },
+    {
+        "id":  "u6",
+        "username":  "admin",
+        "domain":  "System Domain",
+        "email":  "admin@example.com",
+        "organizationRoles":  [
+                                  "org_owner"
+                              ],
+        "serviceRoles":  [
+
+                         ]
+    }
+]
