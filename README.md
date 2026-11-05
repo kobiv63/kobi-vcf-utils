@@ -1,4 +1,4 @@
-# kobi-vcf-utils
+# vcf-utils
 
 Small utilities for VMware Cloud Foundation work. Each utility lives in its own folder with its own guide, tests and notes.
 
@@ -6,28 +6,9 @@ Small utilities for VMware Cloud Foundation work. Each utility lives in its own 
 |---|---|---|
 | [`vra-vcfa-identity-migration`](vra-vcfa-identity-migration/) | Moves users, groups and roles from vRA 8 to VCF Automation (VCFA). Read-only export, safe dry run before anything is created, HTML reports. A browser page (`Start-MigrationUI.ps1`) runs the steps for you. Optional first step: `Sync-IdentitySource.ps1` adds missing AD base group DNs from IDM to the VCF Operations identity source. PowerShell (no installs) and Python | [HOWTO](vra-vcfa-identity-migration/HOWTO.md) |
 
-## vra-vcfa-identity-migration: main files and how to run
+## vra-vcfa-identity-migration: main files
 
 Moves identities from vRA 8.x to a VCF Automation (VCFA) org. Every script comes in two versions with the same logic and file formats: **PowerShell** (primary, nothing to install, Windows PowerShell 5.1 or 7) and **Python** (needs Python 3 and `requests`). Run all commands from inside `vra-vcfa-identity-migration\`.
-
-Typical order: optional `Sync-IdentitySource.ps1` (AD base group DNs into the VCF Operations identity source), then the export from vRA, then the load into VCFA. The load is a dry run until you add `-Apply` (`--apply`). The browser page runs the same steps in that order, one at a time, so you can use it instead of the commands below.
-
-### Main files
-
-| File | What it is |
-|---|---|
-| `Export-VraIdentity.ps1` / `export_vra_identity.py` | Read-only export from vRA 8. Writes `vcfa-import.json` (the file the loader reads), plus `vra-export.json`, `users.json`, `groups.json` and `vra-export-report.html` |
-| `Import-Vcfa.ps1` / `load_vcfa.py` | Loader. Creates the groups, and the users whose roles are not inherited from a group, in a VCFA org. Writes `vcfa-plan.json` and `vcfa-load-report.html` |
-| `Start-MigrationUI.ps1` / `migration-ui.html` | Browser page (PowerShell only). Starts a local server on this computer and runs the steps through the scripts above, showing their output on the page. See "Browser page" below |
-| `Sync-IdentitySource.ps1` | PowerShell only, optional first step. Reads the group base DNs from Workspace ONE Access (IDM) and VCF Operations. Its only write adds one base DN to VCF Operations, and only after a typed `yes`. Still in progress |
-| `vro_export_identity.js` | vRO variant of the export. Not tested in vRO yet |
-| `report-template.html` | Template for both HTML reports. Keep it next to the scripts |
-| `HOWTO.md` | End-user guide, one section per scenario (start here) |
-| `Test-*.ps1`, `test_*.py` | Offline unit tests. `Test-Integration.ps1` runs both PowerShell scripts against a mock vRA and VCFA on localhost |
-| `example-vcfa-import.json`, `examples/` | Made-up sample input, and sample output and reports from a fake environment |
-| `CLAUDE.md` | Developer notes: design decisions, safety rules, parity rules |
-
-Generated files (`*.json`, `*.txt`, `*-report.html`) hold real user names and live tokens. They are git-ignored; never commit them.
 
 ### How to run
 
@@ -49,6 +30,25 @@ Your browser opens a page on this computer only (127.0.0.1). The page has the st
 - **4 Create in VCFA:** needs a dry run with the same choices first, a ticked box and a typed `yes`.
 
 Passwords and tokens stay in the page's memory and go only to the step that needs them; nothing secret is written to a file. **Forget passwords and tokens** clears them. Stop the server with **Stop the UI**, or Ctrl+C in its window. The full walkthrough is in `HOWTO.md` ("Easiest: use the browser page").
+
+### Main files
+
+| File | What it is |
+|---|---|
+| `Export-VraIdentity.ps1` / `export_vra_identity.py` | Read-only export from vRA 8. Writes `vcfa-import.json` (the file the loader reads), plus `vra-export.json`, `users.json`, `groups.json` and `vra-export-report.html` |
+| `Import-Vcfa.ps1` / `load_vcfa.py` | Loader. Creates the groups, and the users whose roles are not inherited from a group, in a VCFA org. Writes `vcfa-plan.json` and `vcfa-load-report.html` |
+| `Start-MigrationUI.ps1` / `migration-ui.html` | Browser page (PowerShell only). Starts a local server on this computer and runs the steps through the scripts above, showing their output on the page. See "Browser page" below |
+| `Sync-IdentitySource.ps1` | PowerShell only, optional first step. Reads the group base DNs from Workspace ONE Access (IDM) and VCF Operations. Its only write adds one base DN to VCF Operations, and only after a typed `yes`. Still in progress |
+| `vro_export_identity.js` | vRO variant of the export. Not tested in vRO yet |
+| `report-template.html` | Template for both HTML reports. Keep it next to the scripts |
+| `HOWTO.md` | End-user guide, one section per scenario (start here) |
+| `Test-*.ps1`, `test_*.py` | Offline unit tests. `Test-Integration.ps1` runs both PowerShell scripts against a mock vRA and VCFA on localhost |
+| `example-vcfa-import.json`, `examples/` | Made-up sample input, and sample output and reports from a fake environment |
+| `CLAUDE.md` | Developer notes: design decisions, safety rules, parity rules |
+
+Generated files (`*.json`, `*.txt`, `*-report.html`) hold real user names and live tokens. They are git-ignored; never commit them.
+
+
 
 **PowerShell** (add `-ExecutionPolicy Bypass` if the policy blocks the script):
 ```
