@@ -87,6 +87,17 @@ Assert-Equal $s.Env['SYNC_VERIFY_TLS'] 'true' 'TLS: on is passed to the identity
 $html = Get-Content -LiteralPath (Join-Path $here 'migration-ui.html') -Raw
 Assert-True ($html -match 'id="verify-tls"' -and $html -match 'data-run="export-domains"') 'page: TLS box and domain button exist'
 
+# Page layout and token boxes: IDM and VCF Operations side by side, each with its own login fields
+$idmCol = $html.IndexOf('id="idm-h"'); $opsCol = $html.IndexOf('id="ops-h"'); $ssoRow = $html.IndexOf('class="sso-row"')
+Assert-True ($idmCol -gt 0 -and $opsCol -gt $idmCol -and $ssoRow -gt $opsCol) 'page: IDM column, then VCF Operations column, then the SSO row'
+Assert-True ($html.IndexOf('id="idm-user"') -gt $idmCol -and $html.IndexOf('id="idm-pass"') -lt $opsCol -and $html.IndexOf('id="idm-tok-in"') -lt $opsCol) 'page: IDM username, password and token are inside the IDM column'
+Assert-True ($html.IndexOf('id="ops-user"') -gt $opsCol -and $html.IndexOf('id="ops-pass"') -lt $ssoRow -and $html.IndexOf('id="ops-tok-in"') -lt $ssoRow) 'page: VCF Operations username, password and token are inside its column'
+Assert-True ($html -match 'type="password" id="vcfa-tok-in"' -and $html -match 'type="password" id="idm-tok-in"' -and $html -match 'type="password" id="ops-tok-in"') 'page: token boxes are password fields (a token is never shown)'
+Assert-True (-not ($html -match '<textarea id="(vcfa|idm|ops)-tok-in"')) 'page: no token box is a text area'
+Assert-True (-not ($html -match 'id="drawer"')) 'page: the fixed output drawer is gone'
+Assert-True ($html -match 'id="btn-browse-import"' -and $html -match 'data-cancel') 'page: Browse button for the import file, cancel in the result panel'
+
+
 $load = @{ vcfaHost = 'vcfa.corp.local'; vcfaOrg = 'finance-org'; vcfaToken = $tok; vcfaMethod = 'browser'; importFile = 'vcfa-import.json' }
 $s = Get-Spec 'load-dry' 'powershell' $load
 Assert-True $s.Ok 'load-dry builds'
@@ -95,6 +106,17 @@ Assert-True (-not ($s.Args -match '-Apply')) 'dry run has no -Apply'
 Assert-Equal $s.Env['VCFA_BROWSER_TOKEN'] $tok 'browser token goes to the environment'
 Assert-True (-not $s.Env.ContainsKey('VCFA_API_TOKEN')) 'only the chosen token is set'
 Assert-True ($s.Args -match '-Org finance-org') 'org flag'
+
+# Import file from the Browse dialog: a full path with spaces is quoted and reaches both loaders unchanged
+$browsed = 'C:\My Exports\customer 1\vcfa-import.json'
+$browsedVals = $load.Clone(); $browsedVals['importFile'] = $browsed     # a copy: the key is replaced, not added twice
+$s = Get-Spec 'load-dry' 'powershell' $browsedVals
+Assert-True ($s.Ok -and $s.Args.Contains('-ImportFile "' + $browsed + '"')) 'browsed import file: quoted for PowerShell'
+$s = Get-Spec 'load-dry' 'python' $browsedVals
+Assert-True ($s.Ok -and $s.Args.Contains('--import-file "' + $browsed + '"')) 'browsed import file: quoted for Python'
+$quoteVals = $load.Clone(); $quoteVals['importFile'] = 'C:\x"y.json'
+$s = Get-Spec 'load-dry' 'powershell' $quoteVals
+Assert-True (-not $s.Ok) 'an import file path with a quote is refused'
 
 $s = Get-Spec 'load-dry' 'powershell' @{ vcfaHost = 'vcfa.corp.local'; vcfaOrg = 'o'; vcfaToken = $tok; vcfaMethod = 'api'; scope = 'groups' }
 Assert-True ($s.Args -match '-ApiToken' -and $s.Args -match '-GroupsOnly') 'api token and groups-only flags'
@@ -255,6 +277,8 @@ try {
     Assert-Equal $r.Status 200 'API with the page token answers'
     Assert-True ($r.Body -match '"scripts"' -and $r.Body -match '"powershell"') 'info lists scripts and engines'
     Assert-True (-not ($r.Body -match 'password')) 'info holds no password'
+    $r = Invoke-Http 'GET' "$base/api/info" @{ 'X-UI-Token' = $token } '' $hostOk
+    Assert-True ($r.Body -match '"folder":""' -and -not ($r.Body -match '"exists":true')) 'no folder is suggested: nothing is looked for until one is chosen'
 
     $H = @{ 'X-UI-Token' = $token }
     function Wait-Job([int]$Id) {
@@ -274,6 +298,7 @@ try {
     Assert-True ($out -match '"exitCode":1') 'a failed login reports exit code 1 (not null)'
     Assert-True ($out -match 'Logging in to https://127\.0\.0\.1:9') 'the output streams to the page'
     Assert-True (-not ($out -match [regex]::Escape($secret))) 'the password is not in the output'
+    Assert-True ($out -match '"reason":"[^"]') 'a failed step gives the reason in plain words'
 
     $vraBody = @{ action = 'export-login'; engine = 'python'; folder = $folder; values = @{ vraHost = '127.0.0.1:9'; vraUsername = 'testuser'; vraPassword = $secret; vraDomain = 'System Domain' } } | ConvertTo-Json -Depth 5 -Compress
     $r = Invoke-Http 'POST' "$base/api/jobs" $H $vraBody $hostOk
@@ -290,6 +315,12 @@ try {
     Assert-Equal $r.Status 400 'a relative folder is refused'
     $r = Invoke-Http 'POST' "$base/api/jobs" $H '{"action":"export-login"' $hostOk
     Assert-Equal $r.Status 400 'invalid JSON is refused'
+
+    # Browse: the page's token is needed, and only JSON files can be picked (both refused before any dialog opens)
+    $r = Invoke-Http 'POST' "$base/api/browse" @{} '{"kind":"json"}' $hostOk
+    Assert-Equal $r.Status 403 'browse without the page token is refused'
+    $r = Invoke-Http 'POST' "$base/api/browse" $H '{"kind":"exe"}' $hostOk
+    Assert-Equal $r.Status 400 'browse offers JSON files only'
 
     # Busy and cancel: a host that never answers keeps the step running long enough to test the second request.
     $slow = @{ action = 'export-login'; engine = 'powershell'; folder = $folder; values = @{ vraHost = '10.255.255.1'; vraUsername = 'u'; vraPassword = 'p' } } | ConvertTo-Json -Depth 5 -Compress # pragma: allowlist secret

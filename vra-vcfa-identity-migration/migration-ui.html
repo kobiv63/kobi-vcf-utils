@@ -59,6 +59,7 @@ body {
 }
 h1 { font-size: 1.4rem; font-weight: 600; margin: 0; }
 h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .35rem; }
+h3 { font-size: .98rem; font-weight: 600; margin: 0 0 .5rem; }
 p { margin: .4rem 0; }
 ul, ol { padding-left: 1.2rem; margin: .4rem 0; }
 code, .mono { font-family: var(--mono); font-size: .9em; }
@@ -93,6 +94,7 @@ a { color: var(--accent); }
 .grid { display: grid; gap: 12px 14px; grid-template-columns: 1fr 1fr; }
 .grid .wide { grid-column: 1 / -1; }
 @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 12px; }
 label, .label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
 input[type="text"], input[type="password"], input[type="url"], textarea, select {
   width: 100%; font: 15px var(--ui); color: var(--ink); background: var(--surface);
@@ -133,6 +135,20 @@ legend { font-weight: 600; font-size: .9rem; padding: 0; margin-bottom: .3rem; }
 .token-status.none { color: var(--ink-2); }
 .token-status.bad { color: var(--bad); }
 
+/* Two systems side by side (step 0): each column holds its own host, login and token */
+.sys-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sys-col {
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  background: var(--surface-2); min-width: 0;
+}
+@media (max-width: 640px) { .sys-cols { grid-template-columns: 1fr; } }
+.sso-row { margin-top: 14px; }
+
+/* Import file: text box plus a Browse button */
+.file-row { display: flex; gap: .5rem; align-items: stretch; }
+.file-row input { flex: 1 1 auto; min-width: 0; }
+.file-row .btn { flex: 0 0 auto; }
+
 /* Help accordions */
 details.help { border: 1px solid var(--line); border-radius: 8px; margin-top: .8rem; background: var(--surface-2); }
 details.help > summary { cursor: pointer; padding: .55rem .75rem; font-weight: 600; font-size: .92rem; }
@@ -168,33 +184,65 @@ details.help img { max-width: 100%; }
 .step.next .state { color: var(--accent); font-weight: 600; }
 .optional { font-size: .85rem; color: var(--ink-2); }
 
-/* Output drawer */
-.drawer {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  background: var(--surface); border-top: 1px solid var(--line);
-  box-shadow: 0 -4px 14px rgba(0,0,0,.08);
+/* Result panel: one per step, under its buttons. Plain words first; the raw output is one click away. */
+.result {
+  margin-top: .9rem; padding: .6rem .8rem; border-radius: 6px;
+  border: 1px solid var(--line); border-left: 4px solid var(--line); background: var(--surface-2);
 }
-.drawer-bar {
-  display: flex; align-items: center; gap: .6rem; padding: .5rem 16px; flex-wrap: wrap;
-  max-width: 980px; margin: 0 auto;
+.result.running { border-left-color: var(--accent); }
+.result.ok { border-left-color: var(--done); }
+.result.warn { border-left-color: var(--caution); }
+.result.bad { border-left-color: var(--bad); }
+.result-head { display: flex; flex-wrap: wrap; gap: .4rem .75rem; align-items: center; justify-content: space-between; }
+.result-title { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; }
+.result-title::before {
+  content: "\2022"; display: inline-grid; place-items: center; flex: 0 0 auto;
+  width: 1.3rem; height: 1.3rem; border-radius: 50%; border: 2px solid var(--line);
+  color: var(--ink-2); font-size: .8rem; line-height: 1;
 }
-.drawer-bar .title { font-weight: 600; }
-.pill { font-size: .82rem; padding: .1rem .55rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
-.pill.running { border-color: var(--accent); color: var(--accent); }
-.pill.ok { border-color: var(--done); color: var(--done); }
-.pill.bad { border-color: var(--bad); color: var(--bad); }
-.drawer-bar .spacer { flex: 1; }
-.log {
-  font-family: var(--mono); font-size: .84rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word;
-  max-height: 34vh; overflow: auto; margin: 0; padding: .6rem 16px 1rem; background: var(--surface-2);
-  border-top: 1px solid var(--line); max-width: none;
+.result.running .result-title::before { content: "\2026"; border-color: var(--accent); color: var(--accent); }
+.result.ok .result-title::before { content: "\2713"; border-color: var(--done); color: var(--done); }
+.result.warn .result-title::before { content: "i"; border-color: var(--caution); color: var(--caution); }
+.result.bad .result-title::before { content: "!"; border-color: var(--bad); color: var(--bad); }
+.result.ok .result-title { color: var(--done); }
+.result.warn .result-title { color: var(--caution); }
+.result.bad .result-title { color: var(--bad); }
+.result-text { margin: .25rem 0 0; font-size: .93rem; }
+details.tech { margin-top: .5rem; }
+details.tech > summary { cursor: pointer; font-size: .88rem; color: var(--ink-2); }
+/* Formatted output: sections, status tags, lists. Plain sentences, no console look. */
+.out { margin-top: .6rem; font-size: .94rem; }
+.out:empty { display: none; }
+.out-h { font-size: .95rem; font-weight: 600; margin: 1.1rem 0 .3rem; }
+.out-h:first-child { margin-top: 0; }
+.out-p { margin: .3rem 0; overflow-wrap: anywhere; }
+.out-p.err { color: var(--bad); }
+.out-label { font-weight: 600; margin-top: .7rem; }
+.out-note { margin: .35rem 0; color: var(--ink-2); font-size: .88rem; }
+.out-indent { margin-left: 1.1rem; }
+.out-strong { font-weight: 600; margin-top: .6rem; }
+.out-list { margin: .2rem 0 .6rem; padding-left: 1.2rem; }
+.out-list li { margin: .15rem 0; overflow-wrap: anywhere; }
+.out-row { display: flex; gap: .7rem; align-items: baseline; padding: .3rem 0; }
+.out-tag {
+  flex: 0 0 auto; min-width: 4.8rem; text-align: center; font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--line); border-radius: 999px; padding: .05rem .5rem; color: var(--ink-2);
 }
-.log .err { color: var(--bad); }
-.log .sys { color: var(--ink-2); font-style: italic; }
-.drawer.collapsed .log { display: none; }
-.log:empty::before { content: "Output appears here when a step runs."; color: var(--ink-2); }
-body { padding-bottom: 3.2rem; }
-body.drawer-open { padding-bottom: 36vh; }
+.out-tag.pass { color: var(--done); border-color: var(--done); }
+.out-tag.fail { color: var(--bad); border-color: var(--bad); }
+.out-tag.warn { color: var(--caution); border-color: var(--caution); }
+.out-text { min-width: 0; overflow-wrap: anywhere; }
+.out-file { margin: .4rem 0; display: flex; flex-wrap: wrap; gap: .3rem .5rem; align-items: baseline; }
+.out-file-label { font-weight: 600; font-size: .88rem; }
+.out-file code { font-size: .85rem; overflow-wrap: anywhere; }
+.out-file-note { color: var(--ink-2); font-size: .85rem; }
+details.out-cmd-wrap { margin-top: 1rem; }
+details.out-cmd-wrap > summary { cursor: pointer; font-size: .88rem; color: var(--ink-2); }
+.out-cmd {
+  font-family: var(--mono); font-size: .8rem; line-height: 1.45; white-space: pre-wrap; word-break: break-all;
+  color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: .5rem .6rem; margin: .4rem 0 0;
+}
 
 .setup-list { list-style: none; padding: 0; margin: .5rem 0 0; font-size: .92rem; }
 .setup-list li { display: flex; gap: .5rem; margin: .2rem 0; }
@@ -271,61 +319,71 @@ body.drawer-open { padding-bottom: 36vh; }
         </div>
         <div class="card">
           <p>Skip this if the groups are already provisioned in VCF Operations. The steps below only read, except the last one, which opens a PowerShell window and asks before it writes anything.</p>
-          <div class="grid">
-            <div>
-              <label for="idm-host">IDM host</label>
-              <input type="text" id="idm-host" placeholder="ca-idm.corp.local">
-            </div>
-            <div>
-              <label for="ops-host">VCF Operations host</label>
-              <input type="text" id="ops-host" placeholder="vcf-ops01.corp.local">
-            </div>
-            <fieldset>
-              <legend>Log in to IDM with</legend>
-              <label class="choice"><input type="radio" name="idm-method" value="password" checked><span>Username and password</span></label>
-              <label class="choice"><input type="radio" name="idm-method" value="token"><span>Browser token</span></label>
-            </fieldset>
-            <fieldset>
-              <legend>Log in to VCF Operations with</legend>
-              <label class="choice"><input type="radio" name="ops-method" value="password" checked><span>Username and password</span></label>
-              <label class="choice"><input type="radio" name="ops-method" value="token"><span>Browser token</span></label>
-            </fieldset>
-            <div class="idm-pw">
-              <label for="idm-user">IDM username</label>
-              <input type="text" id="idm-user" placeholder="admin">
-            </div>
-            <div class="idm-pw">
-              <label for="idm-pass">IDM password</label>
-              <input type="password" id="idm-pass" autocomplete="off">
-            </div>
-            <div class="ops-pw">
-              <label for="ops-user">VCF Operations username</label>
-              <input type="text" id="ops-user" placeholder="admin">
-            </div>
-            <div class="ops-pw">
-              <label for="ops-pass">VCF Operations password</label>
-              <input type="password" id="ops-pass" autocomplete="off">
-            </div>
-            <div class="ops-pw">
-              <label for="ops-auth">VCF Operations auth source</label>
-              <input type="text" id="ops-auth" placeholder="VCF SSO">
-              <p class="hint">Leave blank for a local user. SSO users use the source name, for example VCF SSO.</p>
-            </div>
-            <div>
-              <label for="sso-id">SSO domain ID (optional)</label>
-              <input type="text" id="sso-id" class="mono" placeholder="00000000-0000-0000-0000-000000000000">
-              <p class="hint">Only needed when VCF Operations has more than one SSO domain. It is the ID in the address of the identity source page.</p>
-            </div>
-            <div class="wide idm-tok">
-              <label for="idm-tok-in">IDM browser token</label>
-              <textarea id="idm-tok-in" class="mono" placeholder="Paste the copied request or the token"></textarea>
-              <div class="token-status none" data-token-status="idm"></div>
-            </div>
-            <div class="wide ops-tok">
-              <label for="ops-tok-in">VCF Operations browser token</label>
-              <textarea id="ops-tok-in" class="mono" placeholder="Paste the copied request or the token"></textarea>
-              <div class="token-status none" data-token-status="ops"></div>
-            </div>
+          <div class="sys-cols">
+            <section class="sys-col" aria-labelledby="idm-h">
+              <h3 id="idm-h">IDM</h3>
+              <div class="stack">
+                <div>
+                  <label for="idm-host">IDM host</label>
+                  <input type="text" id="idm-host" placeholder="ca-idm.corp.local">
+                </div>
+                <fieldset>
+                  <legend>Log in to IDM with</legend>
+                  <label class="choice"><input type="radio" name="idm-method" value="password" checked><span>Username and password</span></label>
+                  <label class="choice"><input type="radio" name="idm-method" value="token"><span>Browser token</span></label>
+                </fieldset>
+                <div class="idm-pw">
+                  <label for="idm-user">IDM username</label>
+                  <input type="text" id="idm-user" placeholder="admin">
+                </div>
+                <div class="idm-pw">
+                  <label for="idm-pass">IDM password</label>
+                  <input type="password" id="idm-pass" autocomplete="off">
+                </div>
+                <div class="idm-tok">
+                  <label for="idm-tok-in">IDM browser token</label>
+                  <input type="password" id="idm-tok-in" class="mono" autocomplete="off" placeholder="Paste the copied request or the token">
+                  <div class="token-status none" data-token-status="idm"></div>
+                </div>
+              </div>
+            </section>
+            <section class="sys-col" aria-labelledby="ops-h">
+              <h3 id="ops-h">VCF Operations</h3>
+              <div class="stack">
+                <div>
+                  <label for="ops-host">VCF Operations host</label>
+                  <input type="text" id="ops-host" placeholder="vcf-ops01.corp.local">
+                </div>
+                <fieldset>
+                  <legend>Log in to VCF Operations with</legend>
+                  <label class="choice"><input type="radio" name="ops-method" value="password" checked><span>Username and password</span></label>
+                  <label class="choice"><input type="radio" name="ops-method" value="token"><span>Browser token</span></label>
+                </fieldset>
+                <div class="ops-pw">
+                  <label for="ops-user">VCF Operations username</label>
+                  <input type="text" id="ops-user" placeholder="admin">
+                </div>
+                <div class="ops-pw">
+                  <label for="ops-pass">VCF Operations password</label>
+                  <input type="password" id="ops-pass" autocomplete="off">
+                </div>
+                <div class="ops-pw">
+                  <label for="ops-auth">VCF Operations auth source</label>
+                  <input type="text" id="ops-auth" placeholder="VCF SSO">
+                  <p class="hint">Leave blank for a local user. SSO users use the source name, for example VCF SSO.</p>
+                </div>
+                <div class="ops-tok">
+                  <label for="ops-tok-in">VCF Operations browser token</label>
+                  <input type="password" id="ops-tok-in" class="mono" autocomplete="off" placeholder="Paste the copied request or the token">
+                  <div class="token-status none" data-token-status="ops"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div class="sso-row">
+            <label for="sso-id">SSO domain ID (optional)</label>
+            <input type="text" id="sso-id" class="mono" placeholder="00000000-0000-0000-0000-000000000000">
+            <p class="hint">Only needed when VCF Operations has more than one SSO domain. It is the ID in the address of the identity source page.</p>
           </div>
           <details class="help">
             <summary>How to get a browser token for IDM or VCF Operations</summary>
@@ -335,7 +393,7 @@ body.drawer-open { padding-bottom: 36vh; }
                 <li>Press F12, then open the Network tab.</li>
                 <li>In the page, click something (open a list) so requests show up.</li>
                 <li>Right-click any request to that host, choose Copy, then Copy as fetch.</li>
-                <li>Paste the whole text into the box above. The page takes the token out for you.</li>
+                <li>Paste the whole text into the token box of that system. The page takes the token out for you.</li>
               </ol>
               <p class="hint">IDM tokens start with HZN, VCF Operations tokens with OpsToken or Bearer. Any of them is accepted. A token expires within minutes, so copy a fresh one right before you run a step.</p>
             </div>
@@ -345,6 +403,17 @@ body.drawer-open { padding-bottom: 36vh; }
             <button class="btn" type="button" data-run="sync-extract">Read the base DNs</button>
             <button class="btn" type="button" data-run="sync-compare">Compare (read only)</button>
             <button class="btn caution" type="button" data-run="sync-apply-console">Add a missing base DN (opens a window)</button>
+          </div>
+          <div class="result hidden" data-result>
+            <div class="result-head">
+              <span class="result-title" data-result-title></span>
+              <button class="btn quiet" type="button" data-cancel hidden>Cancel the step</button>
+            </div>
+            <p class="result-text" data-result-text></p>
+            <details class="tech" data-tech>
+              <summary>Show details</summary>
+              <div class="out" data-out></div>
+            </details>
           </div>
           <p class="msg" data-msg></p>
           <div class="note info">The last button opens a PowerShell window. The script lists the base DNs that are missing, asks which to add, does a dry run unless you choose Write, and needs you to type <code>yes</code> there. Nothing is written from this page.</div>
@@ -401,6 +470,17 @@ body.drawer-open { padding-bottom: 36vh; }
             <button class="btn primary" type="button" data-run="export-all">Export</button>
             <button class="btn quiet" type="button" data-open="vra-export-report.html" disabled>Open the export report</button>
           </div>
+          <div class="result hidden" data-result>
+            <div class="result-head">
+              <span class="result-title" data-result-title></span>
+              <button class="btn quiet" type="button" data-cancel hidden>Cancel the step</button>
+            </div>
+            <p class="result-text" data-result-text></p>
+            <details class="tech" data-tech>
+              <summary>Show details</summary>
+              <div class="out" data-out></div>
+            </details>
+          </div>
           <p class="msg" data-msg></p>
         </div>
       </div>
@@ -434,7 +514,7 @@ body.drawer-open { padding-bottom: 36vh; }
             </fieldset>
             <div class="wide">
               <label for="vcfa-tok-in">Token</label>
-              <textarea id="vcfa-tok-in" class="mono" placeholder="Paste the copied request, or only the token"></textarea>
+              <input type="password" id="vcfa-tok-in" class="mono" autocomplete="off" placeholder="Paste the copied request, or only the token">
               <div class="token-status none" data-token-status="vcfa"></div>
             </div>
           </div>
@@ -462,6 +542,17 @@ body.drawer-open { padding-bottom: 36vh; }
           <div class="actions">
             <button class="btn primary" type="button" data-run="load-login">Test the connection</button>
           </div>
+          <div class="result hidden" data-result>
+            <div class="result-head">
+              <span class="result-title" data-result-title></span>
+              <button class="btn quiet" type="button" data-cancel hidden>Cancel the step</button>
+            </div>
+            <p class="result-text" data-result-text></p>
+            <details class="tech" data-tech>
+              <summary>Show details</summary>
+              <div class="out" data-out></div>
+            </details>
+          </div>
           <p class="msg" data-msg></p>
         </div>
       </div>
@@ -480,7 +571,10 @@ body.drawer-open { padding-bottom: 36vh; }
           <div class="grid">
             <div class="wide">
               <label for="import-file">Import file</label>
-              <input type="text" id="import-file" class="mono" value="vcfa-import.json">
+              <div class="file-row">
+                <input type="text" id="import-file" class="mono" value="vcfa-import.json">
+                <button class="btn" type="button" id="btn-browse-import">Browse...</button>
+              </div>
               <p class="hint" id="import-hint"></p>
             </div>
             <fieldset class="wide">
@@ -502,6 +596,17 @@ body.drawer-open { padding-bottom: 36vh; }
           <div class="actions">
             <button class="btn primary" type="button" data-run="load-dry">Run the dry run</button>
             <button class="btn quiet" type="button" data-open="vcfa-load-report.html" disabled>Open the load report</button>
+          </div>
+          <div class="result hidden" data-result>
+            <div class="result-head">
+              <span class="result-title" data-result-title></span>
+              <button class="btn quiet" type="button" data-cancel hidden>Cancel the step</button>
+            </div>
+            <p class="result-text" data-result-text></p>
+            <details class="tech" data-tech>
+              <summary>Show details</summary>
+              <div class="out" data-out></div>
+            </details>
           </div>
           <p class="msg" data-msg></p>
         </div>
@@ -536,6 +641,17 @@ body.drawer-open { padding-bottom: 36vh; }
             <button class="btn caution" type="button" data-run="load-apply" id="btn-apply" disabled>Create in VCFA</button>
             <button class="btn quiet" type="button" data-open="vcfa-load-report.html" disabled>Open the load report</button>
           </div>
+          <div class="result hidden" data-result>
+            <div class="result-head">
+              <span class="result-title" data-result-title></span>
+              <button class="btn quiet" type="button" data-cancel hidden>Cancel the step</button>
+            </div>
+            <p class="result-text" data-result-text></p>
+            <details class="tech" data-tech>
+              <summary>Show details</summary>
+              <div class="out" data-out></div>
+            </details>
+          </div>
           <p class="msg" data-msg></p>
         </div>
       </div>
@@ -543,30 +659,30 @@ body.drawer-open { padding-bottom: 36vh; }
   </ol>
 </main>
 
-<section class="drawer collapsed" id="drawer" aria-label="Output">
-  <div class="drawer-bar">
-    <span class="title" id="drawer-title">No step has run</span>
-    <span class="pill hidden" id="drawer-pill"></span>
-    <span class="spacer"></span>
-    <button class="btn quiet" type="button" id="btn-cancel" hidden>Cancel the step</button>
-    <button class="btn quiet" type="button" id="btn-clear">Clear</button>
-    <button class="btn quiet" type="button" id="btn-toggle" aria-expanded="false">Show output</button>
-  </div>
-  <pre class="log" id="log" aria-live="polite"></pre>
-</section>
-
 <script>
 (function () {
   "use strict";
 
   var TOKEN = document.querySelector('meta[name="ui-token"]').getAttribute("content");
   var PREF_KEY = "vcfMigrationUi.prefs";
-  var STEP_ACTIONS = { 0: ["sync-extract", "sync-compare"], 1: ["export-all"], 2: ["load-login"], 3: ["load-dry"], 4: ["load-apply"] };
+  var STEP_ACTIONS = { 0: ["sync-login", "sync-extract", "sync-compare"], 1: ["export-all"], 2: ["load-login"], 3: ["load-dry"], 4: ["load-apply"] };
   var TITLES = {
     "sync-login": "Test both logins", "sync-extract": "Read the base DNs", "sync-compare": "Compare the base DNs",
     "sync-apply-console": "Add a base DN (console window)", "export-login": "Test the vRA login",
     "export-all": "Export from vRA", "export-domains": "List the vRA domains", "load-login": "Test the VCFA connection",
     "load-dry": "VCFA dry run", "load-apply": "Create in VCFA"
+  };
+  // What a finished step says in plain words. A failure shows the reason the server found in the output.
+  var DONE_TEXT = {
+    "sync-login": "Both logins work.",
+    "sync-extract": "The base DNs were read from both systems. Nothing was changed.",
+    "sync-compare": "The comparison is finished. Nothing was changed.",
+    "export-login": "The vRA login works.",
+    "export-all": "The export is finished. The files are in the output folder.",
+    "export-domains": "The domains are listed below.",
+    "load-login": "The VCFA connection works.",
+    "load-dry": "The dry run is finished. Nothing was created in VCFA.",
+    "load-apply": "The groups and users were created in VCFA. Open the load report to check them."
   };
   var CONSOLE_ACTIONS = { "sync-apply-console": true };
   var PREF_FIELDS = ["folder", "vra-host", "vra-user", "vra-domain", "vra-proj-domain", "vcfa-host", "vcfa-org",
@@ -578,7 +694,8 @@ body.drawer-open { padding-bottom: 36vh; }
   var lastDry = null;
   var info = null;
   var jobs = [];
-  var activeJob = null;   // { id, action, title, after, timer }
+  var activeJob = null;   // { id, action, step, after, timer, values, found }
+  var stepLines = { 0: [], 1: [], 2: [], 3: [], 4: [] };   // output lines per step: { s: stream, t: text }
   var connected = true;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -605,16 +722,14 @@ body.drawer-open { padding-bottom: 36vh; }
     if (!tok || tok.length < 20) return { ok: false, token: "", message: "That is too short to be a token. Copy the whole request, or the token after Bearer." };
     return { ok: true, token: tok, message: "" };
   }
-  function mask(tok) {
-    return tok.slice(0, 6) + "..." + tok.slice(-4) + " (" + tok.length + " characters)";
-  }
+  // A token is never shown on the page: the box is a password field and it is emptied once the token is taken.
   function bindToken(inputId, key, statusSel) {
     var input = document.getElementById(inputId);
     var status = $(statusSel);
     function render() {
       if (tokens[key]) {
         status.className = "token-status have";
-        setText(status, "Token found: " + mask(tokens[key]) + ". Paste a new one to replace it.");
+        setText(status, "Token found and kept in this page only. Paste a new one to replace it.");
       } else {
         status.className = "token-status none";
         setText(status, "No token yet.");
@@ -625,9 +740,8 @@ body.drawer-open { padding-bottom: 36vh; }
       var r = extractToken(input.value);
       if (r.ok) {
         tokens[key] = r.token;
-        input.value = "";            // keep the page free of the whole request
-        status.className = "token-status have";
-        setText(status, "Token found: " + mask(r.token) + ". Paste a new one to replace it.");
+        input.value = "";            // the page keeps the token only in memory
+        render();
       } else {
         status.className = "token-status bad";
         setText(status, r.message);
@@ -667,7 +781,7 @@ body.drawer-open { padding-bottom: 36vh; }
     var b = $("#banner");
     if (ok) { b.classList.remove("show"); }
     else {
-      setText(b, "The UI server is not answering. Start Start-MigrationUI.ps1 again, then reload this page. Anything running in the drawer keeps running in its own process.");
+      setText(b, "The UI server is not answering. Start Start-MigrationUI.ps1 again, then reload this page. A step that was running keeps running in its own process.");
       b.classList.add("show");
     }
   }
@@ -760,33 +874,25 @@ body.drawer-open { padding-bottom: 36vh; }
   }
 
   // ---- Running a step
-  function startRun(action, btn) {
+  function startRun(action) {
     if (activeJob) { return; }
     var body = collect(action);
+    var step = stepOf(action);
     if (action === "load-apply") {
       if (body.values.confirm !== "yes") { stepMsg(4, "Type yes in the box first.", "bad"); return; }
     }
     if (action.indexOf("sync-") === 0) { body.engine = "powershell"; }
     var missing = missingFor(action, body.values);
-    var step = stepOf(action);
     if (missing.length) { stepMsg(step, "Fill in: " + missing.join(", ") + ".", "bad"); return; }
     if (!body.folder) { stepMsg(step, "Set the output folder in Setup first.", "bad"); return; }
     savePrefs();
-    setBusy(true, action);
-    var msgEl = stepMsgEl(step);
-    setText(msgEl, "Starting...");
-    msgEl.className = "msg";
+    setBusy(true);
+    stepMsg(step, "");
     var dryValues = { scope: body.values.scope, only: body.values.only.join("\n"), importFile: body.values.importFile };
     api("/api/jobs", { method: "POST", body: body }).then(function (r) {
-      activeJob = { id: r.id, action: action, after: 0, timer: null, values: dryValues, found: [] };
-      drawerStart(TITLES[action] || action, CONSOLE_ACTIONS[action]);
-      document.body.classList.add("drawer-open");
+      activeJob = { id: r.id, action: action, step: step, after: 0, timer: null, values: dryValues, found: [] };
+      beginResult(step, action, CONSOLE_ACTIONS[action]);
       poll();
-      if (CONSOLE_ACTIONS[action]) {
-        stepMsg(step, "A PowerShell window opened. Answer its questions there.", "warn");
-      } else {
-        setText(msgEl, "Running. The output is in the drawer at the bottom.");
-      }
     }).catch(function (e) {
       setBusy(false);
       stepMsg(step, e.message, "bad");
@@ -806,17 +912,160 @@ body.drawer-open { padding-bottom: 36vh; }
     el.className = "msg" + (kind ? " " + kind : "");
   }
 
+  // ---- Result panel (one per step)
+  function resultEl(step) { return $("#step-" + step + " [data-result]"); }
+  function outEl(step) { return $("#step-" + step + " [data-out]"); }
+
+  // ---- Output, formatted for people. The raw lines stay in stepLines; the command goes at the end, closed.
+  var TAG_LABEL = { pass: "Passed", fail: "Failed", warn: "Check", skip: "Skipped", info: "Info", ok: "OK", note: "Note" };
+  function mk(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function statusRow(kind, text, label) {
+    var row = mk("div", "out-row");
+    row.appendChild(mk("span", "out-tag " + kind, label || TAG_LABEL[kind] || kind));
+    row.appendChild(mk("span", "out-text", text));
+    return row;
+  }
+  function fileRow(text) {
+    var row = mk("div", "out-file");
+    row.appendChild(mk("span", "out-file-label", "Saved"));
+    var cut = text.indexOf(" (");
+    row.appendChild(mk("code", "", cut > 0 ? text.slice(0, cut) : text));
+    if (cut > 0) row.appendChild(mk("span", "out-file-note", text.slice(cut)));
+    return row;
+  }
+  // "Label: first; second; third" -> { label, items }, or null when the line has no list
+  function splitList(t) {
+    var parts = t.split("; ");
+    if (parts.length < 2) return null;
+    var cut = parts[0].lastIndexOf(": ");
+    if (cut <= 0) return null;
+    var items = parts.slice();
+    items[0] = parts[0].slice(cut + 2);
+    return { label: parts[0].slice(0, cut), items: items };
+  }
+  function formatLines(lines) {
+    var frag = document.createDocumentFragment();
+    var command = [];
+    lines.forEach(function (ln) {
+      var raw = String(ln.t === undefined ? "" : ln.t);
+      var t = raw.trim();
+      if (!t) return;
+      if (/^Command:/.test(t) || /^Working folder:/.test(t)) { command.push(t); return; }
+      if (ln.s === "sys") {
+        if (/^Started on this computer/.test(t) || /^Finished with exit code/.test(t)) return;
+        frag.appendChild(mk("p", "out-note", t));
+        return;
+      }
+      var indent = raw.length - raw.replace(/^\s+/, "").length;
+      var st = /^\[(PASS|FAIL|WARN|SKIP|INFO|OK|NOTE)\]\s*(.*)$/i.exec(t);
+      if (st) { frag.appendChild(statusRow(st[1].toLowerCase(), st[2])); return; }
+      var inVcf = /^in VCF Operations: (YES|NO)$/i.exec(t);
+      if (inVcf) {
+        var yes = inVcf[1].toUpperCase() === "YES";
+        frag.appendChild(statusRow(yes ? "pass" : "warn", yes ? "This base DN is in VCF Operations." : "This base DN is missing from VCF Operations.", yes ? "Present" : "Missing"));
+        return;
+      }
+      if (/^Wrote /.test(t)) { frag.appendChild(fileRow(t.replace(/^Wrote /, ""))); return; }
+      var ind = indent >= 2 ? " out-indent" : "";
+      if (indent < 2 && /\.\.\.$|:$/.test(t) && t.length <= 120) { frag.appendChild(mk("h4", "out-h", t)); return; }
+      // "Label: first; second; third" becomes a label and a list
+      var split = splitList(t);
+      if (split) {
+        frag.appendChild(mk("p", "out-p out-label" + ind, split.label));
+        var ul = mk("ul", "out-list" + ind);
+        split.items.forEach(function (x) { ul.appendChild(mk("li", "", x)); });
+        frag.appendChild(ul);
+        return;
+      }
+      var strong = indent >= 2 && /base DN/i.test(t) ? " out-strong" : "";
+      frag.appendChild(mk("p", (ln.s === "err" ? "out-p err" : "out-p") + ind + strong, t));
+    });
+    if (command.length) {
+      var det = mk("details", "out-cmd-wrap");
+      det.appendChild(mk("summary", "", "Command that was run"));
+      det.appendChild(mk("pre", "out-cmd", command.join("\n")));
+      frag.appendChild(det);
+    }
+    return frag;
+  }
+  function setResult(step, kind, title, text) {
+    var el = resultEl(step);
+    el.className = "result" + (kind ? " " + kind : "");
+    el.removeAttribute("data-job-id");
+    setText($("#step-" + step + " [data-result-title]"), title);
+    setText($("#step-" + step + " [data-result-text]"), text || "");
+  }
+  function setCancelVisible(step, on) { $("#step-" + step + " [data-cancel]").hidden = !on; }
+  function pushLines(step, lines) {
+    var list = stepLines[step];
+    for (var i = 0; i < lines.length; i++) list.push(lines[i]);
+    renderOut(step);
+  }
+  function noteLine(step, text) { pushLines(step, [{ s: "sys", t: text }]); }
+  function renderOut(step) {
+    var box = outEl(step);
+    box.textContent = "";
+    box.appendChild(formatLines(stepLines[step] || []));
+  }
+  function beginResult(step, action, isConsole) {
+    stepLines[step] = [];
+    outEl(step).setAttribute("data-loaded", "1");
+    renderOut(step);
+    if (isConsole) {
+      setResult(step, "warn", "Opening a window", "A PowerShell window is opening. Answer its questions there. Nothing is written from this page.");
+      setCancelVisible(step, false);
+    } else {
+      setResult(step, "running", "Running: " + (TITLES[action] || action), "This can take a minute. Nothing else is needed from you here.");
+      setCancelVisible(step, true);
+    }
+  }
+  function failureText(j) {
+    var why = j.reason ? j.reason : ("The step stopped with exit code " + j.exitCode + " and gave no reason.");
+    return why + " Open \"Show details\" to see the full output.";
+  }
+  // Shows the last result of each step from the server's history (on page load only).
+  function showHistoryResult(step, j) {
+    if (j.status === "done" && j.exitCode === 0) setResult(step, "ok", "Done", DONE_TEXT[j.action] || "Finished.");
+    else if (j.status === "cancelled") setResult(step, "warn", "Cancelled", "The step was cancelled before it finished. Check the output folder for anything it already wrote.");
+    else setResult(step, "bad", "Failed", failureText(j));
+    resultEl(step).setAttribute("data-job-id", String(j.id));
+    stepLines[step] = [];
+    outEl(step).removeAttribute("data-loaded");
+    renderOut(step);
+  }
+  // The technical output of a finished step is loaded only when someone opens it.
+  function loadTech(step, details) {
+    if (!details.open) return;
+    var box = outEl(step);
+    if (box.getAttribute("data-loaded") === "1") return;
+    var id = resultEl(step).getAttribute("data-job-id");
+    if (!id) return;
+    box.setAttribute("data-loaded", "1");
+    api("/api/jobs/" + id + "?after=0").then(function (r) {
+      stepLines[step] = (r.lines || []).slice();
+      if (!stepLines[step].length) noteLine(step, "No output was recorded for this step.");
+      else renderOut(step);
+    }).catch(function (e) {
+      noteLine(step, "Could not load the output: " + e.message);
+    });
+  }
+
   function poll() {
     if (!activeJob) return;
     var job = activeJob;
     api("/api/jobs/" + job.id + "?after=" + job.after).then(function (r) {
       (r.lines || []).forEach(function (ln) {
-        drawerLine(ln.s, ln.t);
         if (job.action === "export-domains" && ln.s === "out") {
           var m = /^DOMAIN: (.+) \| users (\d+) \| groups (\d+)$/.exec(ln.t || "");
           if (m) job.found.push({ name: m[1], users: Number(m[2]), groups: Number(m[3]) });
         }
       });
+      pushLines(job.step, r.lines || []);
       job.after = r.next;
       if (r.status === "running") {
         job.timer = setTimeout(poll, 700);
@@ -824,45 +1073,42 @@ body.drawer-open { padding-bottom: 36vh; }
         drawerEnd(r);
       }
     }).catch(function (e) {
-      drawerLine("sys", "Lost the connection to the UI server: " + e.message);
+      noteLine(job.step, "Lost the connection to the UI server: " + e.message);
       job.timer = setTimeout(poll, 2000);
     });
   }
   function drawerEnd(r) {
     var finished = activeJob;
     var action = finished.action;
-    var step = stepOf(action);
+    var step = finished.step;
     var ok = r.status === "done" && r.exitCode === 0;
-    var pill = $("#drawer-pill");
-    if (r.status === "console") {
-      pill.className = "pill"; setText(pill, "Opened in a console window");
-    } else {
-      pill.className = "pill " + (ok ? "ok" : "bad");
-      setText(pill, ok ? "Finished" : (r.status === "cancelled" ? "Cancelled" : "Failed, exit code " + r.exitCode));
-    }
-    $("#btn-cancel").hidden = true;
-    drawerLine("sys", ok ? "Done." : (r.status === "cancelled" ? "Cancelled." : "The step did not finish. Read the lines above for the reason."));
     activeJob = null;
-    setBusy(false);
-    if (r.status !== "console") {
-      if (ok) stepMsg(step, "Done. " + (step === 3 ? "Nothing was created." : ""), "ok");
-      else stepMsg(step, "The step failed. The reason is in the output drawer.", "bad");
+    setCancelVisible(step, false);
+    if (r.status === "console") {
+      setResult(step, "warn", "Window opened", "The PowerShell window is open. Answer its questions there. Nothing is written from this page.");
+    } else if (ok) {
+      setResult(step, "ok", "Done", DONE_TEXT[action] || "Finished.");
+    } else if (r.status === "cancelled") {
+      setResult(step, "warn", "Cancelled", "The step was cancelled before it finished. Check the output folder for anything it already wrote.");
+    } else {
+      setResult(step, "bad", "Failed", failureText(r));
     }
+    setBusy(false);
     if (ok && action === "load-dry") { lastDry = finished.values; }
     if (ok && action === "export-domains") { setDomains(finished.found || []); }
-    loadJobs();
+    loadJobs(false);
     loadInfo();
   }
 
-  // ---- Drawer
+  // ---- Domains (step 1)
   function setDomains(list) {
     domainState.found = list;
     domainState.picked = {};
     list.forEach(function (d) { domainState.picked[d.name] = true; });
     renderDomains();
     savePrefs();
-    if (list.length) stepMsg(1, "Found " + list.length + " domain(s). Untick any you want to leave out.", "ok");
-    else stepMsg(1, "No domains were found. Check the login, then try again.", "bad");
+    if (list.length) setResult(1, "ok", "Done", "Found " + list.length + " domain(s). Untick any you want to leave out.");
+    else setResult(1, "bad", "No domains found", "Check the vRA login, then try again.");
   }
   function renderDomains() {
     var box = $("#domain-list");
@@ -886,28 +1132,13 @@ body.drawer-open { padding-bottom: 36vh; }
       items.appendChild(label);
     });
   }
-  function drawerStart(title, isConsole) {
-    setText($("#drawer-title"), title);
-    var pill = $("#drawer-pill"); pill.className = "pill running"; setText(pill, isConsole ? "Opening a window" : "Running");
-    $("#btn-cancel").hidden = !!isConsole;
-    $("#log").textContent = "";
-    var d = $("#drawer"); d.classList.remove("collapsed"); setToggle(true);
-    drawerLine("sys", "Started. Nothing is sent anywhere else; the script runs on this computer.");
-  }
-  function drawerLine(stream, text) {
-    var log = $("#log");
-    var span = document.createElement("span");
-    span.className = stream === "err" ? "err" : (stream === "sys" ? "sys" : "");
-    span.textContent = text + "\n";
-    log.appendChild(span);
-    log.scrollTop = log.scrollHeight;
-  }
-  function setToggle(open) {
-    var d = $("#drawer");
-    $("#btn-toggle").setAttribute("aria-expanded", open ? "true" : "false");
-    setText($("#btn-toggle"), open ? "Hide output" : "Show output");
-    if (!open) d.classList.add("collapsed");
-    document.body.classList.toggle("drawer-open", open);
+
+  function cancelActive() {
+    if (!activeJob) return;
+    var job = activeJob;
+    api("/api/jobs/" + job.id + "/cancel", { method: "POST", body: {} }).then(function () {
+      noteLine(job.step, "Cancel requested.");
+    }).catch(function (e) { alert(e.message); });
   }
 
   // ---- Busy state
@@ -920,7 +1151,7 @@ body.drawer-open { padding-bottom: 36vh; }
   }
 
   // ---- Stepper state from the server's job history
-  function applyStepStates() {
+  function applyStepStates(showHistory) {
     // Jobs arrive newest first. The newest finished job of a step's own actions decides that step.
     var states = { 0: "todo", 1: "todo", 2: "todo", 3: "todo", 4: "todo" };
     var decided = {};
@@ -928,9 +1159,14 @@ body.drawer-open { padding-bottom: 36vh; }
       var step = stepOf(j.action);
       if (decided[step] || j.status === "running" || j.status === "console") return;
       if (!STEP_ACTIONS[step] || STEP_ACTIONS[step].indexOf(j.action) < 0) return;
-      decided[step] = true;
+      decided[step] = j;
       states[step] = (j.status === "done" && j.exitCode === 0) ? "done" : "failed";
     });
+    if (showHistory) {
+      [0, 1, 2, 3, 4].forEach(function (k) {
+        if (decided[k] && !(activeJob && activeJob.step === k)) showHistoryResult(k, decided[k]);
+      });
+    }
     var next = null;
     [1, 2, 3, 4].forEach(function (s) { if (!next && states[s] !== "done") next = s; });
     for (var k = 0; k <= 4; k++) {
@@ -943,13 +1179,12 @@ body.drawer-open { padding-bottom: 36vh; }
       if (k === 0 && states[k] === "todo") label = "Optional, not run";
       setText($("#step-" + k + " [data-state]"), label);
     }
-    var doneCount = [0, 1, 2, 3, 4].filter(function (k) { return states[k] === "done"; }).length;
-    return { states: states, next: next, doneCount: doneCount };
+    return { states: states, next: next };
   }
-  function loadJobs() {
+  function loadJobs(showHistory) {
     return api("/api/jobs").then(function (r) {
       jobs = r.jobs || [];
-      applyStepStates();
+      applyStepStates(!!showHistory);
       // The newest successful dry run survives a page reload (the server keeps its scope and file).
       var lastDryJob = jobs.filter(function (j) { return j.action === "load-dry" && j.status === "done" && j.exitCode === 0; })[0];
       if (lastDryJob) { lastDry = { scope: lastDryJob.scope, only: lastDryJob.only, importFile: lastDryJob.importFile }; }
@@ -971,7 +1206,6 @@ body.drawer-open { padding-bottom: 36vh; }
   }
   function renderInfo() {
     if (!info) return;
-    if (!val("folder") && info.folder) { $("#folder").value = info.folder; }
     // Hosts and user names from environment variables fill only the empty fields (never passwords).
     var defaultFields = { VRA_HOST: "vra-host", VRA_USERNAME: "vra-user", VRA_DOMAIN: "vra-domain",
       VCFA_HOST: "vcfa-host", VCFA_ORG: "vcfa-org", IDM_HOST: "idm-host", IDM_USERNAME: "idm-user",
@@ -982,7 +1216,8 @@ body.drawer-open { padding-bottom: 36vh; }
     });
     setText($("#top-sub"), "Scripts in " + info.scriptDir);
     var hint = $("#folder-hint");
-    if (!info.folderExists) setText(hint, "This folder does not exist yet. It is created when a step runs.");
+    if (!val("folder")) setText(hint, "Choose a folder for the output first. Nothing runs until you do.");
+    else if (!info.folderExists) setText(hint, "This folder does not exist yet. It is created when a step runs.");
     else setText(hint, "Folder found.");
     var py = info.engines.python;
     var pyRadio = $("#engine-python");
@@ -1010,11 +1245,35 @@ body.drawer-open { padding-bottom: 36vh; }
     var have = {};
     (info.files || []).forEach(function (f) { have[f.name] = f.exists; });
     $all("[data-open]").forEach(function (b) { b.disabled = !have[b.getAttribute("data-open")]; });
-    var imp = have["vcfa-import.json"];
-    setText($("#import-hint"), imp ? "Found vcfa-import.json in the output folder." : "No vcfa-import.json in the output folder yet. Run step 1 first, or choose another file.");
+    var file = val("import-file");
+    var importHint = $("#import-hint");
+    if (isFullPath(file)) {
+      setText(importHint, "This file is used as it is. Browse again to choose another.");
+    } else {
+      setText(importHint, have["vcfa-import.json"] ? "Found vcfa-import.json in the output folder." : "No vcfa-import.json in the output folder yet. Run step 1 first, or browse to another file.");
+    }
     updateApply();
   }
+  function isFullPath(p) { return /^([A-Za-z]:[\\\/]|\\\\|\/)/.test(p || ""); }
 
+  // ---- Import file: a native Open dialog on this computer picks the real path
+  function browseImport(btn) {
+    var label = btn.textContent;
+    btn.disabled = true;
+    setText(btn, "Choose the file...");
+    api("/api/browse", { method: "POST", body: { kind: "json", folder: val("folder") } }).then(function (r) {
+      if (r.path) {
+        $("#import-file").value = r.path;
+        savePrefs();
+        renderInfo();
+      }
+    }).catch(function (e) {
+      alert(e.message);
+    }).then(function () {
+      btn.disabled = false;
+      setText(btn, label);
+    });
+  }
   function openReport(name) {
     api("/api/open", { method: "POST", body: { name: name, folder: val("folder") } }).catch(function (e) {
       alert(e.message);
@@ -1053,26 +1312,19 @@ body.drawer-open { padding-bottom: 36vh; }
     renderers.ops = bindToken("ops-tok-in", "ops", '[data-token-status="ops"]');
 
     $all("[data-run]").forEach(function (b) {
-      b.addEventListener("click", function () { startRun(b.getAttribute("data-run"), b); });
+      b.addEventListener("click", function () { startRun(b.getAttribute("data-run")); });
     });
     $all("[data-open]").forEach(function (b) {
       b.addEventListener("click", function () { openReport(b.getAttribute("data-open")); });
     });
-    $("#btn-toggle").addEventListener("click", function () {
-      setToggle($("#drawer").classList.contains("collapsed"));
+    $all("[data-cancel]").forEach(function (b) {
+      b.addEventListener("click", cancelActive);
     });
-    $("#btn-clear").addEventListener("click", function () {
-      if (activeJob) return;
-      $("#log").textContent = "";
-      setText($("#drawer-title"), "No step has run");
-      var pill = $("#drawer-pill"); pill.className = "pill hidden";
+    $all("[data-tech]").forEach(function (d) {
+      var step = Number(d.closest(".step").getAttribute("data-step"));
+      d.addEventListener("toggle", function () { loadTech(step, d); });
     });
-    $("#btn-cancel").addEventListener("click", function () {
-      if (!activeJob) return;
-      api("/api/jobs/" + activeJob.id + "/cancel", { method: "POST", body: {} }).then(function () {
-        drawerLine("sys", "Cancel requested.");
-      }).catch(function (e) { alert(e.message); });
-    });
+    $("#btn-browse-import").addEventListener("click", function () { browseImport(this); });
     $("#btn-forget").addEventListener("click", function () {
       ["vra-pass", "idm-pass", "ops-pass", "vcfa-tok-in", "idm-tok-in", "ops-tok-in", "confirm-yes"].forEach(function (id) {
         var el = document.getElementById(id); if (el) el.value = "";
@@ -1099,6 +1351,7 @@ body.drawer-open { padding-bottom: 36vh; }
     });
     $("#folder").addEventListener("change", loadInfo);
     $("#folder").addEventListener("blur", loadInfo);
+    $("#import-file").addEventListener("change", renderInfo);
     $all('input[name="scope"]').forEach(function (el) {
       el.addEventListener("change", function () { $("#only-wrap").classList.toggle("hidden", radio("scope") !== "only"); updateApply(); });
     });
@@ -1110,14 +1363,13 @@ body.drawer-open { padding-bottom: 36vh; }
     $all('input[name="ops-method"]').forEach(function (el) { el.addEventListener("change", showMethods); });
     showMethods();
 
-    loadInfo().then(function () { return loadJobs(); }).then(function () {
+    loadInfo().then(function () { return loadJobs(true); }).then(function () {
       // Resume watching a job that is still running (for example after a page reload).
       var running = jobs.filter(function (j) { return j.status === "running"; })[0];
       if (running) {
-        activeJob = { id: running.id, action: running.action, after: 0, timer: null };
-        drawerStart(TITLES[running.action] || running.action, false);
-        document.body.classList.add("drawer-open");
-        setBusy(true);
+        var step = stepOf(running.action);
+        activeJob = { id: running.id, action: running.action, step: step, after: 0, timer: null, values: {}, found: [] };
+        beginResult(step, running.action, false);
         poll();
       }
       setBusy(!!activeJob);
@@ -1137,7 +1389,7 @@ body.drawer-open { padding-bottom: 36vh; }
   else init();
 
   // Exposed for tests only
-  window.__ui = { extractToken: extractToken, mask: mask };
+  window.__ui = { extractToken: extractToken, formatLines: formatLines };
 })();
 </script>
 </body>

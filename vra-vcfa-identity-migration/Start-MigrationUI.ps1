@@ -383,6 +383,48 @@ function Invoke-ConsoleWindow($Spec) {
     }
 }
 
+# ---- File picker (the import file) ------------------------------------------
+# A native Open dialog runs in its own STA PowerShell process, so the page gets a real local path. The dialog is
+# started only by the page's own request (token and Origin checked), and the chosen path is checked for shape and
+# existence by the caller. Nothing is written.
+function Show-FilePicker([string]$StartDir) {
+    $dialog = @'
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.StartPosition = 'CenterScreen'
+$owner.ShowInTaskbar = $false
+$owner.Opacity = 0
+$owner.Show()
+$owner.Activate()
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = 'Choose the import file'
+$d.Filter = 'Import file (*.json)|*.json|All files (*.*)|*.*'
+$d.CheckFileExists = $true
+$dir = [Environment]::GetEnvironmentVariable('UI_BROWSE_DIR')
+if ($dir -and (Test-Path -LiteralPath $dir -PathType Container)) { $d.InitialDirectory = $dir }
+if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.FileName) }
+$owner.Close()
+'@
+    $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($dialog))
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = Get-PowerShellExe
+    $psi.Arguments = "-STA -NoProfile -ExecutionPolicy Bypass -EncodedCommand $enc"
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $psi.EnvironmentVariables['UI_BROWSE_DIR'] = [string]$StartDir
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $p.StandardInput.Close()
+    $picked = $p.StandardOutput.ReadToEnd().Trim()
+    $p.WaitForExit()
+    if ($picked -and $picked -match '\.json$' -and (Test-Path -LiteralPath $picked -PathType Leaf)) { return $picked }
+    return ''
+}
+
 function Update-Job($Job) {
     if ($Job.Status -ne 'running' -or -not $Job.Proc) { return }
     foreach ($r in $Job.Readers) { if (-not $r.Handle.IsCompleted) { return } }   # output still arriving
@@ -396,6 +438,7 @@ function Update-Job($Job) {
     $Job.Readers = @()
     $Job.ExitCode = $p.ExitCode
     $Job.Status = if ($Job.CancelRequested) { 'cancelled' } else { 'done' }
+    $Job.Reason = if ($Job.Status -eq 'done' -and $Job.ExitCode -ne 0) { Get-FailureReason $Job } else { '' }
     $Job.Ended = (Get-Date).ToUniversalTime().ToString('o')
     Add-JobLine $Job 'sys' ("Finished with exit code $($Job.ExitCode).")
     if ($script:Current -and [object]::ReferenceEquals($script:Current, $Job)) { $script:Current = $null }
@@ -409,7 +452,7 @@ function Start-Run($Spec) {
         Id = $id; Action = $Spec.Action; Title = $Spec.Title; Status = 'running'; ExitCode = $null
         Started = (Get-Date).ToUniversalTime().ToString('o'); Ended = $null
         Scope = $Spec.Scope; Only = $Spec.Only; ImportFile = $Spec.ImportFile
-        Lines = $lines; Readers = @(); Proc = $null; CancelRequested = $false; WorkDir = $Spec.WorkDir
+        Lines = $lines; Readers = @(); Proc = $null; CancelRequested = $false; WorkDir = $Spec.WorkDir; Reason = ''
     }
     [void]$script:Jobs.Insert(0, $job)
     Add-JobLine $job 'sys' ("Working folder: " + $Spec.WorkDir)
@@ -433,6 +476,7 @@ function Start-Run($Spec) {
         $job.Status = 'done'; $job.ExitCode = -1
         $job.Ended = (Get-Date).ToUniversalTime().ToString('o')
         Add-JobLine $job 'err' ('The step could not be started: ' + $_.Exception.Message)
+        $job.Reason = Get-FailureReason $job
     }
     return $job
 }
@@ -441,6 +485,7 @@ function Get-JobSummary($Job) {
     return @{
         id = $Job.Id; action = $Job.Action; title = $Job.Title; status = $Job.Status; exitCode = $Job.ExitCode
         startedUtc = $Job.Started; endedUtc = $Job.Ended; scope = $Job.Scope; only = $Job.Only; importFile = $Job.ImportFile
+        reason = $Job.Reason
     }
 }
 
@@ -449,17 +494,36 @@ function Find-Job([int]$Id) {
     return $null
 }
 
+# The line that says why a step failed: the last error-like line of its output. Empty when none is found (the page
+# then says the exit code). Passwords are never printed by the scripts, so the line is safe to show.
+function Get-FailureReason($Job) {
+    $items = @($Job.Lines.ToArray())
+    for ($i = $items.Count - 1; $i -ge 0; $i--) {
+        $ln = $items[$i]
+        $t = ([string]$ln.t).Trim()
+        if ($ln.s -eq 'sys' -or -not $t) { continue }
+        if ($ln.s -eq 'err' -or $t -match '(?i)error|fail|refus|cannot|unable|could not|not found|denied|invalid|unauthori|forbidden|timed out|timeout|exception|not allowed|no such') {
+            if ($t.Length -gt 300) { return $t.Substring(0, 297) + '...' }
+            return $t
+        }
+    }
+    return ''
+}
+
 # ---- Info for the page ------------------------------------------------------
 function Get-Info([string]$Folder) {
-    $fold = if ($Folder) { $Folder } else { $script:ScriptDir }
+    # No folder chosen yet: nothing is looked for, and the page asks the user to choose one. (No default folder.)
+    $fold = if ($Folder) { $Folder } else { '' }
     $exists = $false
-    try { $exists = Test-Path -LiteralPath $fold -PathType Container } catch { $exists = $false }
+    if ($fold) { try { $exists = Test-Path -LiteralPath $fold -PathType Container } catch { $exists = $false } }
     $files = @()
     foreach ($n in $script:KnownFiles) {
-        $p = Join-Path $fold $n
         $ex = $false; $size = 0
-        try { $ex = Test-Path -LiteralPath $p -PathType Leaf } catch { $ex = $false }
-        if ($ex) { $size = (Get-Item -LiteralPath $p).Length }
+        if ($fold) {
+            $p = Join-Path $fold $n
+            try { $ex = Test-Path -LiteralPath $p -PathType Leaf } catch { $ex = $false }
+            if ($ex) { $size = (Get-Item -LiteralPath $p).Length }
+        }
         $files += @{ name = $n; exists = $ex; size = $size }
     }
     $py = Get-PythonInfoCached
@@ -573,7 +637,7 @@ function Invoke-Route($Ctx) {
             if ($after -lt 0) { $after = 0 }
             $lines = @()
             for ($i = $after; $i -lt $job.Lines.Count; $i++) { $lines += $job.Lines[$i] }
-            Send-Json $Ctx 200 @{ id = $job.Id; status = $job.Status; exitCode = $job.ExitCode; lines = $lines; next = $job.Lines.Count }
+            Send-Json $Ctx 200 @{ id = $job.Id; status = $job.Status; exitCode = $job.ExitCode; reason = $job.Reason; lines = $lines; next = $job.Lines.Count }
             return
         }
         if ($method -eq 'POST' -and $m.Groups[2].Success) {
@@ -600,6 +664,18 @@ function Invoke-Route($Ctx) {
             Send-Json $Ctx 500 @{ error = ('The step could not be started: ' + $_.Exception.Message) }; return
         }
         Send-Json $Ctx 200 @{ id = $job.Id; status = $job.Status }; return
+    }
+
+    if ($method -eq 'POST' -and $path -eq '/api/browse') {
+        $body = Read-Body $req
+        if ($null -eq $body) { Send-Json $Ctx 400 @{ error = 'The request was not valid JSON.' }; return }
+        if ((Get-Text $body 'kind') -ne 'json') { Send-Json $Ctx 400 @{ error = 'Only JSON files can be chosen here.' }; return }
+        $start = Get-Text $body 'folder'
+        try {
+            if (-not ($start -and [System.IO.Path]::IsPathRooted($start) -and (Test-Path -LiteralPath $start -PathType Container))) { $start = '' }
+        } catch { $start = '' }
+        $picked = Show-FilePicker $start
+        Send-Json $Ctx 200 @{ path = $picked; cancelled = (-not $picked) }; return
     }
 
     if ($method -eq 'POST' -and $path -eq '/api/open') {

@@ -31,10 +31,12 @@ Run this in the folder with the scripts:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-MigrationUI.ps1
 ```
-Your browser opens a page on this computer only. It runs the same scripts as the sections below, one step at a time, and shows the output at the bottom. Each step says what it needs, and step 2 explains how to copy a token from the browser.
+Your browser opens a page on this computer only. It runs the same scripts as the sections below, one step at a time. Each step says what it needs, and step 2 explains how to copy a token from the browser. When a step runs, its panel shows **Running**, then **Done**, or **Failed** with the reason in plain words. The output is under **Show details**, closed unless you open it. It lists each check with a status tag, and the command that was run sits at the bottom.
 
+- **Output folder.** Setup asks for it first, and nothing runs until you choose one. Pick a folder that is private to you.
 - **Steps:** 0 (optional) makes the AD groups visible to VCF Operations, 1 reads vRA, 2 connects to VCFA, 3 is the dry run, 4 creates the objects in VCFA.
 - **Passwords and tokens** stay in the page's memory and go only to the step that needs them. They are never saved to a file. "Forget passwords and tokens" clears them, and closing the window clears them too.
+- **Import file.** Step 3 has a **Browse...** button that opens a file picker on this computer. Pick the import file you want to load; the full path is used as it is.
 - **Step 4** needs you to tick a box and type `yes`. It also needs a dry run with the same choices first.
 - **Domains and certificates.** In step 1, **Find the domains** lists the vRA domains with their user and group counts. Untick any you want to leave out; with nothing found yet, everything is exported. In Setup, **Verify the TLS certificates** is off by default (self-signed certificates). Turn it on only when the appliances use a certificate from a trusted authority.
 - **The page cannot do this** (use the PowerShell console for it): adding a base DN to VCF Operations opens its own PowerShell window, where you confirm with `yes`.

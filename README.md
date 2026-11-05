@@ -20,7 +20,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-MigrationUI.ps1
 .\Start-MigrationUI.ps1 -Port 8766             # another port, if 8765 is in use
 .\Start-MigrationUI.ps1 -NoBrowser             # start the server only; open the address the window prints
 ```
-Your browser opens a page on this computer only (127.0.0.1). The page has the steps in order, and the output of each run appears in a drawer at the bottom:
+Your browser opens a page on this computer only (127.0.0.1). The page has the steps in order. Each step shows what it did under its buttons, and the raw output is under "Show details":
 
 - **Setup:** choose PowerShell or Python for the vRA export and the VCFA load. Leave **Verify the TLS certificates** off for a lab with self-signed certificates.
 - **0 (optional):** make the AD groups visible to VCF Operations (`Sync-IdentitySource.ps1`). Adding a base DN opens its own PowerShell window and needs a typed `yes`.
