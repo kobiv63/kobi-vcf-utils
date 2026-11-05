@@ -49,6 +49,17 @@ class Wizard(unittest.TestCase):
         self.assertTrue(L.s.verify)
         L.s.verify = False
 
+    def test_tls_setting_comes_from_env(self):
+        with mock.patch.dict("os.environ", {"VCFA_VERIFY_TLS": "true"}), \
+                mock.patch.object(L, "VCFA_BROWSER_TOKEN", ""), \
+                mock.patch.object(L, "build_plan", side_effect=AssertionError("stop")), \
+                mock.patch("builtins.open", mock.mock_open(read_data='{"users": [], "groups": [], "roleBindings": []}')):
+            with self.assertRaises(AssertionError):
+                # URL, org, TLS (empty = take VCFA_VERIFY_TLS), import file, browser method, groups only, no filter, dry run
+                self.run_main([], ["https://vcfa.example", "my-org", "", "", "1", "", "", ""])
+        self.assertTrue(L.s.verify)
+        L.s.verify = False
+
     def test_browser_token_flag_prompts_when_token_missing(self):
         with mock.patch.object(L, "VCFA_BROWSER_TOKEN", ""), mock.patch.dict("os.environ", {}, clear=False):
             import os

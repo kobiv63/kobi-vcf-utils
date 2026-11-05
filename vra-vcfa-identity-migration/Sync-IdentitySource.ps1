@@ -47,7 +47,7 @@
 
 .NOTES
     Defaults come from the env vars IDM_HOST, IDM_USERNAME, IDM_PASSWORD, IDM_TOKEN, IDM_METHOD (password or token),
-    VCFOPS_HOST, VCFOPS_USERNAME, VCFOPS_PASSWORD, VCFOPS_AUTHSOURCE, VCFOPS_TOKEN, VCFOPS_METHOD. When input is redirected nothing is prompted.
+    VCFOPS_HOST, VCFOPS_USERNAME, VCFOPS_PASSWORD, VCFOPS_AUTHSOURCE, VCFOPS_TOKEN, VCFOPS_METHOD, SYNC_VERIFY_TLS (true or false). When input is redirected nothing is prompted.
     If scripts are blocked:  powershell -ExecutionPolicy Bypass -File .\Sync-IdentitySource.ps1 login
 #>
 [CmdletBinding()]
@@ -67,7 +67,7 @@ $script:IdmHost = 'idm.example.com'            # e.g. 'ca-idm.corp.local' (https
 if ($env:IDM_HOST) { $script:IdmHost = $env:IDM_HOST }
 $script:OpsHost = 'vcf-ops.example.com'        # e.g. 'vcf-ops01.corp.local' (https:// is added if missing; env VCFOPS_HOST)
 if ($env:VCFOPS_HOST) { $script:OpsHost = $env:VCFOPS_HOST }
-$script:VerifyTls = $false   # asked at the prompt; $false accepts a self-signed certificate (lab). e.g. $true for a CA-signed cert
+$script:VerifyTls = $false   # asked at the prompt; $false accepts a self-signed certificate (lab). e.g. $true for a CA-signed cert (env SYNC_VERIFY_TLS, one answer for IDM and VCF Operations)
 $script:TimeoutSec = 30      # seconds per request (not asked); e.g. 120 for a slow appliance
 $script:OutputPath = (Get-Location).Path   # asked at the prompt for the extract step; e.g. 'C:\exports\customer1'
 $script:OpsApiBase = '/suite-api'          # VCF Operations API prefix (not asked); the IAM API is OpsApiBase + /api/fleet-management/iam
@@ -190,6 +190,14 @@ function Read-HostUrl([string]$Label, [string]$Default = '', [string]$Example = 
 }
 
 # ---- HTTP -------------------------------------------------------------------
+function Get-FlagSetting([string]$Text, [bool]$Default) {
+    # Reads a yes/no setting from an env var: true/false, yes/no, y/n, 1/0 or on/off. Anything else gives the default.
+    $t = ([string]$Text).Trim().ToLower()
+    if ($t -in @('true', 'yes', 'y', '1', 'on')) { return $true }
+    if ($t -in @('false', 'no', 'n', '0', 'off')) { return $false }
+    return $Default
+}
+
 function Set-TlsPolicy([bool]$Verify) {
     $script:VerifyTls = $Verify
     if ($PSVersionTable.PSVersion.Major -lt 6) {
@@ -895,7 +903,7 @@ function Main {
 
     $script:IdmHost = Read-HostUrl 'IDM host (Workspace ONE Access / vIDM FQDN; https:// is added for you)' $script:IdmHost 'ca-idm.corp.local'
     $script:OpsHost = Read-HostUrl 'VCF Operations host (FQDN; https:// is added for you)' $script:OpsHost 'vcf-ops01.corp.local'
-    Set-TlsPolicy (Confirm-Yes 'Verify the TLS certificates? (answer n for self-signed certificates)' $script:VerifyTls)
+    Set-TlsPolicy (Confirm-Yes 'Verify the TLS certificates? (answer n for self-signed certificates)' (Get-FlagSetting $env:SYNC_VERIFY_TLS $script:VerifyTls))
     $idmCred = Read-Credentials 'IDM' 'IDM' $false
     $opsCred = Read-Credentials 'VCF Operations' 'VCFOPS' $true
     if ($step -in @('extract', 'compare', 'apply')) {

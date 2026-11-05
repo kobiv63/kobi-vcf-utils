@@ -114,6 +114,10 @@ try {
     Assert-True ($r.Code -eq 1) 'export bad password: exit code 1'
     Assert-True ($r.Out -like '*login failed (401)*bad credentials*') 'export bad password: clear message with the 401 body'
 
+    $r = Invoke-Script $exportScript 'domains' $env1
+    Assert-True ($r.Code -eq 0) 'export domains: exit code 0'
+    Assert-True ($r.Out -match 'DOMAIN: corp\.example\.com \| users \d+ \| groups \d+') 'export domains: one line per domain, in the page format'
+    Assert-True ($r.Out -notlike '*Wrote *') 'export domains: writes no files'
     $r = Invoke-Script $exportScript 'all' $env1
     Assert-True ($r.Code -eq 0) 'export all: exit code 0'
     foreach ($f in 'vra-export.json', 'vcfa-import.json', 'users.json', 'groups.json') {

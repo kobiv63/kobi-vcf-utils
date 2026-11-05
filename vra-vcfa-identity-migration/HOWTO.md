@@ -10,6 +10,7 @@ Two PowerShell scripts. The first reads vRA (read only) and writes an import fil
 | `Export-VraIdentity.ps1` | Reads vRA and writes `vcfa-import.json` (plus `vra-export.json`, `users.json`, `groups.json`) |
 | `Import-Vcfa.ps1` | Reads an import file and creates the groups, plus the users whose roles are not inherited from a group, in VCFA |
 | `Sync-IdentitySource.ps1` | Optional step 0. Makes sure the AD groups are provisioned in the VCF Operations identity source (adds missing base group DNs) |
+| `Start-MigrationUI.ps1` and `migration-ui.html` | The browser page: runs the scripts step by step (see "Easiest" above) |
 | `report-template.html` | The look of the HTML reports. Keep it next to the scripts |
 | `example-vcfa-import.json` | A tiny import file with one group, to try the loader safely |
 | `HOWTO.md` | This guide |
@@ -21,6 +22,23 @@ Two PowerShell scripts. The first reads vRA (read only) and writes an import fil
 Unblock-File .\*.ps1
 powershell -ExecutionPolicy Bypass -File .\Export-VraIdentity.ps1 login
 ```
+
+---
+
+## Easiest: use the browser page
+
+Run this in the folder with the scripts:
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-MigrationUI.ps1
+```
+Your browser opens a page on this computer only. It runs the same scripts as the sections below, one step at a time, and shows the output at the bottom. Each step says what it needs, and step 2 explains how to copy a token from the browser.
+
+- **Steps:** 0 (optional) makes the AD groups visible to VCF Operations, 1 reads vRA, 2 connects to VCFA, 3 is the dry run, 4 creates the objects in VCFA.
+- **Passwords and tokens** stay in the page's memory and go only to the step that needs them. They are never saved to a file. "Forget passwords and tokens" clears them, and closing the window clears them too.
+- **Step 4** needs you to tick a box and type `yes`. It also needs a dry run with the same choices first.
+- **Domains and certificates.** In step 1, **Find the domains** lists the vRA domains with their user and group counts. Untick any you want to leave out; with nothing found yet, everything is exported. In Setup, **Verify the TLS certificates** is off by default (self-signed certificates). Turn it on only when the appliances use a certificate from a trusted authority.
+- **The page cannot do this** (use the PowerShell console for it): adding a base DN to VCF Operations opens its own PowerShell window, where you confirm with `yes`.
+- **Stop it** with "Stop the UI" on the page, or Ctrl+C in its window.
 
 ---
 
@@ -68,6 +86,12 @@ Settings can come from `$env:IDM_HOST`, `$env:IDM_USERNAME`, `$env:VCFOPS_HOST`,
 ```
 .\Export-VraIdentity.ps1 login
 ```
+
+**List the vRA domains (no export):**
+```
+.\Export-VraIdentity.ps1 domains
+```
+It logs in and prints one line per domain, with its user and group counts. Use those names in the domain question of `all`, or set `VRA_DOMAINS` (for example `corp.example.com,System Domain`, or `all`) to skip the question.
 
 **Export everything:**
 ```
@@ -235,6 +259,8 @@ If you give neither `-BrowserToken` nor `-ApiToken`, the script uses a token it 
 
 Settings can also come from `$env:VCFA_HOST`, `$env:VCFA_ORG`, `$env:VRA_HOST`, `$env:VRA_USERNAME`, `$env:VRA_DOMAIN` and similar; each prompt shows its default.
 
+For a run without prompts, these set the defaults: `VRA_VERIFY_TLS`, `VCFA_VERIFY_TLS` and `SYNC_VERIFY_TLS` take `true` or `false` (the answer to "Verify the TLS certificate?"), and `VRA_DOMAINS` takes `all` or a comma-separated list (the answer to the domain question). The browser page sets them for you.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -245,7 +271,7 @@ Settings can also come from `$env:VCFA_HOST`, `$env:VCFA_ORG`, `$env:VRA_HOST`, 
 | `Roles not found in VCFA` | A role-map name does not exist in your org |
 | Group has no users in VCFA | Users have not signed in yet, or the IdP group name does not match |
 | `running scripts is disabled` | See the note at the top |
-| Certificate errors | Answer `n` to "Verify the TLS certificate?" for a self-signed certificate |
+| Certificate errors | Answer `n` to "Verify the TLS certificate?" for a self-signed certificate (in the page: leave "Verify the TLS certificates" off) |
 
 ## Security
 
@@ -265,6 +291,7 @@ You need Python 3 and `pip install requests`. Run both scripts from the same fol
 **Export from vRA**
 ```
 python export_vra_identity.py login
+python export_vra_identity.py domains
 python export_vra_identity.py all
 python export_vra_identity.py users
 python export_vra_identity.py groups

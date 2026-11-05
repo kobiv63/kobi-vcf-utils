@@ -55,6 +55,22 @@ class Parsing(unittest.TestCase):
         with mock.patch.object(m, "INCLUDE_DOMAINS", []):
             self.assertTrue(m.in_scope(SYS_USER))
 
+    def test_flag_setting_reads_env_text(self):
+        self.assertTrue(m.flag_setting("TRUE", False))
+        self.assertFalse(m.flag_setting("off", True))
+        self.assertTrue(m.flag_setting("maybe", True))
+        self.assertFalse(m.flag_setting("", False))
+
+    def test_domain_list_all_blank_and_names(self):
+        self.assertEqual(m.domain_list("ALL"), [])
+        self.assertEqual(m.domain_list(""), [])
+        self.assertEqual(m.domain_list(" corp.example.com , System Domain ,"), ["corp.example.com", "System Domain"])
+
+    def test_domain_lines_match_the_powershell_output(self):
+        self.assertEqual(m.domain_lines([USER, SYS_USER], [GROUP]), [
+            "DOMAIN: corp.example.com | users 1 | groups 1",
+            "DOMAIN: System Domain | users 1 | groups 0"])
+
     def test_summarize_user_flat_no_ignored_roles_no_nulls(self):
         s = m.summarize(USER)
         self.assertEqual(s["organizationRoles"], ["org_member"])

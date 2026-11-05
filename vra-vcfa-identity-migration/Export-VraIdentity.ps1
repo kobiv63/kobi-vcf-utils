@@ -23,13 +23,13 @@
     .\Export-VraIdentity.ps1 all
 
 .NOTES
-    Defaults come from the env vars VRA_HOST, VRA_USERNAME, VRA_PASSWORD, VRA_DOMAIN, VRA_PROJECT_USER_DOMAIN
-    or the settings below. When input is redirected (no terminal) nothing is prompted and the defaults are used.
+    Defaults come from the env vars VRA_HOST, VRA_USERNAME, VRA_PASSWORD, VRA_DOMAIN, VRA_PROJECT_USER_DOMAIN,
+    VRA_DOMAINS (all, or a comma-separated list of domains) and VRA_VERIFY_TLS (true or false), or the settings below. When input is redirected (no terminal) nothing is prompted and the defaults are used.
     If scripts are blocked:  powershell -ExecutionPolicy Bypass -File .\Export-VraIdentity.ps1
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('login', 'users', 'groups', 'all')]
+    [ValidateSet('login', 'users', 'groups', 'domains', 'all')]
     [string]$Step
 )
 
@@ -42,8 +42,8 @@ $script:Password = ''      # leave empty to be prompted; never commit it (env VR
 $script:Domain = ''        # vIDM domain the login account belongs to, e.g. 'System Domain' or 'corp.example.com' (env VRA_DOMAIN)
 # Domains to include in the export (case-insensitive), e.g. @('System Domain','corp.example.com'). Empty = everything.
 # One admin login returns principals from all vIDM domains assigned to the org.
-$script:IncludeDomains = @('System Domain', 'corp.example.com')   # TODO: set your custom domain
-$script:VerifyTls = $false   # asked at the prompt; $false accepts a self-signed certificate (lab). e.g. $true for a CA-signed cert
+$script:IncludeDomains = @('System Domain', 'corp.example.com')   # TODO: set your custom domain (env VRA_DOMAINS overrides it; 'all' = everything)
+$script:VerifyTls = $false   # asked at the prompt; $false accepts a self-signed certificate (lab). e.g. $true for a CA-signed cert (env VRA_VERIFY_TLS)
 $script:TimeoutSec = 30      # seconds per request (not asked); e.g. 120 for a slow appliance
 $script:OutputDir = (Get-Location).Path   # asked at the prompt; default is the folder you run the script from, e.g. 'C:\exports\customer1'
 
@@ -82,6 +82,7 @@ $script:Steps = @(
     @{ Value = 'login'; Text = 'Test login only (checks host, username, password and domain)' },
     @{ Value = 'users'; Text = 'List users (shows raw output to check the API works)' },
     @{ Value = 'groups'; Text = 'List groups (shows raw output to check the API works)' },
+    @{ Value = 'domains'; Text = 'List the vIDM domains in vRA (no export; choose which to export)' },
     @{ Value = 'all'; Text = 'Full export (writes vcfa-import.json and backups)' }
 )
 
@@ -190,6 +191,14 @@ function Read-HostUrl([string]$Label, [string]$Default = '', [string]$Example = 
 }
 
 # ---- HTTP -------------------------------------------------------------------
+function Get-FlagSetting([string]$Text, [bool]$Default) {
+    # Reads a yes/no setting from an env var: true/false, yes/no, y/n, 1/0 or on/off. Anything else gives the default.
+    $t = ([string]$Text).Trim().ToLower()
+    if ($t -in @('true', 'yes', 'y', '1', 'on')) { return $true }
+    if ($t -in @('false', 'no', 'n', '0', 'off')) { return $false }
+    return $Default
+}
+
 function Set-TlsPolicy([bool]$Verify) {
     $script:VerifyTls = $Verify
     if ($PSVersionTable.PSVersion.Major -lt 6) {
@@ -477,6 +486,23 @@ function Test-InScope($P) {
     $dom = (Get-PrincipalDomain $P).ToLower()
     foreach ($d in $script:IncludeDomains) { if ($d.ToLower() -eq $dom) { return $true } }
     return $false
+}
+
+function ConvertTo-DomainList([string]$Text) {
+    # 'all' or blank = no filter (empty list); otherwise the comma-separated names, trimmed.
+    $t = ([string]$Text).Trim()
+    if (-not $t -or $t.ToLower() -eq 'all') { return }
+    return @($t.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
+function Get-DomainLines($Users, $Groups) {
+    # One line per vIDM domain, in the form the browser page reads: DOMAIN: <name> | users <n> | groups <m>
+    $userCounts = @{}; $groupCounts = @{}
+    foreach ($u in @($Users)) { $d = Get-PrincipalDomain $u; $userCounts[$d] = 1 + [int]$userCounts[$d] }
+    foreach ($g in @($Groups)) { $d = Get-PrincipalDomain $g; $groupCounts[$d] = 1 + [int]$groupCounts[$d] }
+    $all = @((@($userCounts.Keys) + @($groupCounts.Keys)) | Select-Object -Unique)
+    $names = Sort-ByKey $all { $_.ToLower() }
+    return @(foreach ($d in $names) { "DOMAIN: $d | users $([int]$userCounts[$d]) | groups $([int]$groupCounts[$d])" })
 }
 
 function Get-PrincipalName($P) {
@@ -774,24 +800,24 @@ function First-Set { foreach ($a in $args) { if ($a) { return $a } }; return '' 
 
 # ---- Main -------------------------------------------------------------------
 function Main {
-    # Usage: .\Export-VraIdentity.ps1 [login|users|groups|all]   (no argument = menu)
+    # Usage: .\Export-VraIdentity.ps1 [login|users|groups|domains|all]   (no argument = menu)
     $step = $Step
-    if (-not $step) { $step = Select-Option 'What do you want to do?' $script:Steps 4 }
+    if (-not $step) { $step = Select-Option 'What do you want to do?' $script:Steps 5 }
 
     $script:VraHost = Read-HostUrl 'vRA host (FQDN; https:// is added for you)' $script:VraHost 'dev.vra.local'
-    Set-TlsPolicy (Confirm-Yes 'Verify the TLS certificate? (answer n for a self-signed certificate)' $script:VerifyTls)
+    Set-TlsPolicy (Confirm-Yes 'Verify the TLS certificate? (answer n for a self-signed certificate)' (Get-FlagSetting $env:VRA_VERIFY_TLS $script:VerifyTls))
     $username = Read-Value 'vRA username' (First-Set $script:Username $env:VRA_USERNAME) -Example 'configurationadmin'
     $password = First-Set $script:Password $env:VRA_PASSWORD
     if (-not $password) { $password = Read-Value 'vRA password' -Secret }
     $domain = Read-Value 'vIDM domain of the login account' (First-Set $env:VRA_DOMAIN $script:Domain) -Example 'System Domain or corp.example.com'
-    if ($step -ne 'login') {
+    if ($step -notin @('login', 'domains')) {
         $script:OutputDir = Read-Value 'Folder for the output files' $script:OutputDir -Example 'C:\exports\customer1'
     }
     if ($step -eq 'all') {
         $shown = (@($script:IncludeDomains) -join ', '); if (-not $shown) { $shown = 'all' }
+        if ($env:VRA_DOMAINS) { $shown = $env:VRA_DOMAINS }
         $answer = Read-Value "Domains to export (comma-separated, or 'all')" $shown -Example 'corp.example.com, System Domain'
-        if ($answer.ToLower() -eq 'all') { $script:IncludeDomains = @() }
-        else { $script:IncludeDomains = @($answer.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+        $script:IncludeDomains = @(ConvertTo-DomainList $answer)
         $script:DirectoryProviderType = (Read-Value 'How VCFA authenticates directory users/groups (OAUTH, LDAP or SAML)' $script:DirectoryProviderType).ToUpper()
         if ($script:DirectoryProviderType -notin @('OAUTH', 'LDAP', 'SAML')) {
             Die "provider type must be OAUTH, LDAP or SAML, not '$($script:DirectoryProviderType)'"
@@ -805,6 +831,17 @@ function Main {
     $org = Get-OrgId $cspToken
     Write-Host "LOGIN OK. Org: $org"
     if ($step -eq 'login') { return }
+
+    if ($step -eq 'domains') {
+        Write-Host 'Fetching users and groups to list their domains ...'
+        $ur = Find-FirstWorking $script:UserPaths $org $cspToken
+        $gr = Find-FirstWorking $script:GroupPaths $org $cspToken
+        $lines = @(Get-DomainLines @($ur.Items) @($gr.Items))
+        Write-Host 'Domains in vRA (set VRA_DOMAINS to all, or to a comma-separated list of these names):'
+        if ($lines.Count -eq 0) { Write-Host '  No users or groups were found, so there are no domains.' }
+        foreach ($line in $lines) { Write-Host $line }
+        return
+    }
 
     if ($step -in @('users', 'groups')) {
         $paths = if ($step -eq 'users') { $script:UserPaths } else { $script:GroupPaths }

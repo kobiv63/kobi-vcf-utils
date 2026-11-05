@@ -15,6 +15,7 @@ Exports users, groups and roles from vRA 8.x and creates the groups, plus the us
 | `Test-Export.ps1`, `Test-Import.ps1` | PowerShell offline unit tests (own tiny assert helper, no Pester) |
 | `Sync-IdentitySource.ps1` | PowerShell only. Step before the load: logs in to IDM and VCF Operations and reads the group base DNs from both (read only so far). In progress, see "Identity source step" below |
 | `Test-Integration.ps1` | Runs both real scripts against a mock vRA+VCFA HTTP server on localhost, export then load |
+| `Start-MigrationUI.ps1`, `migration-ui.html` | Browser page for the steps (PowerShell only, no dependencies). The server listens on 127.0.0.1, checks Host, Origin and a per-run token, runs the scripts as child processes with the secrets in their environment only, and reads their output. `Test-Ui.ps1` tests it (command builder offline, server live, runs against a closed port) |
 | `export_vra_identity.py` | Python vRA export. Writes `vcfa-import.json` (what the loader reads) plus `vra-export.json`, `users.json`, `groups.json` |
 | `load_vcfa.py` | Loader. Reads `vcfa-import.json`, builds a plan, creates groups/users. Dry run unless Apply |
 | `vro_export_identity.js` | vRO variant of the export. Untested in vRO |
@@ -37,7 +38,7 @@ Facts verified against the lab (do not re-guess):
 - VCF Operations records: SSO realm (`ssorealms`) has `idpId`; `GET .../identity-providers/{idpId}` has `provisioningConfig.ldapConfigurations[]` (`ldapConfigurationId`, `ldapBindConfiguration.baseDn` = `DC=corp,DC=local`); `GET .../identity-providers/{idpId}/ldap-directories` items have `ldapConfigurationId`, `vidbDirectoryId`, `numberOfGroups` (41 in the lab), `numberOfUsers`. The `ssoRealmId` equals the UUID in the UI address (`.../sso-domains/domain/<id>/identity-source`).
 - VCF Operations sync profile (seen in the lab): `GET .../ldap-directories/{ldapConfigurationId}/sync-profile` returns `{ ldapGroups[], ldapUsers[], includeNestedGroupsAndMembers, syncSchedule (HOURLY), userAttributeMappings[] }`. `ldapGroups[]` entries are either one chosen group `{ dn, name, objectGuid, baseDn, selectAll: false, compliant }` or a whole base DN `{ baseDn, selectAll: true, compliant }` (no dn). The UI's "Base group DN" list is the distinct `baseDn` values (5 in the lab). `ldapUsers[]` are individually chosen users (personal data, not kept in the output). Writing is probably `PUT` on the same sync-profile (read it, change it, put it back whole); confirm with the user's test group before any write.
 
-Env vars (defaults, all optional): `IDM_HOST`, `IDM_USERNAME`, `IDM_PASSWORD`, `IDM_TOKEN`, `IDM_METHOD` (password or token), `VCFOPS_HOST`, `VCFOPS_USERNAME`, `VCFOPS_PASSWORD`, `VCFOPS_AUTHSOURCE`, `VCFOPS_TOKEN`, `VCFOPS_METHOD`. Output `identity-sources.json` holds real group and DN names and the LDAP bind DN (not the password; secrets are stripped); it is ignored by git.
+Env vars (defaults, all optional): `IDM_HOST`, `IDM_USERNAME`, `IDM_PASSWORD`, `IDM_TOKEN`, `IDM_METHOD` (password or token), `VCFOPS_HOST`, `VCFOPS_USERNAME`, `VCFOPS_PASSWORD`, `VCFOPS_AUTHSOURCE`, `VCFOPS_TOKEN`, `VCFOPS_METHOD`, `SYNC_VERIFY_TLS` (true or false; one answer for both systems). Output `identity-sources.json` holds real group and DN names and the LDAP bind DN (not the password; secrets are stripped); it is ignored by git.
 
 ## Commands
 
@@ -46,12 +47,14 @@ Env vars (defaults, all optional): `IDM_HOST`, `IDM_USERNAME`, `IDM_PASSWORD`, `
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-Export.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-Import.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-Integration.ps1
-.\Export-VraIdentity.ps1 [login|users|groups|all]
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-Ui.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-MigrationUI.ps1 [-Port 8765] [-NoBrowser]
+.\Export-VraIdentity.ps1 [login|users|groups|domains|all]
 .\Import-Vcfa.ps1 [-Org X] [-BrowserToken|-ApiToken] [-GroupsOnly|-Users] [-Only NAME] [-LoginOnly] [-Apply] [-ImportFile F] [-AllowMissingRoles]
 
 # Python
 python -m unittest test_export test_load
-python export_vra_identity.py [login|users|groups|all]
+python export_vra_identity.py [login|users|groups|domains|all]
 python load_vcfa.py [--org X] [--browser-token|--api-token] [--groups-only|--users] [--only NAME] [--login-only] [--apply]
 ```
 
@@ -78,6 +81,10 @@ Python needs Python 3 and `requests`; PowerShell needs nothing (Windows PowerShe
 - **Wizard trigger in `load_vcfa.py`:** the full wizard runs only when `len(sys.argv) == 1`. With any flag, the action is a dry run unless `--apply` or `--login-only`.
 - Config that tests patch (`INCLUDE_DOMAINS`, `USERNAME`, `PASSWORD`, `OUTPUT_DIR`, `VCFA_BROWSER_TOKEN`) are module globals. `VRA_HOST` and `VCFA_HOST` are reassigned from prompts inside `main()`.
 - When adding an option: add the flag/parameter and the prompt in BOTH implementations, add the scenario to `HOWTO.md`, add unit tests (Python and PowerShell). If it touches HTTP, extend `Test-Integration.ps1`.
+- **Environment defaults for the questions.** `VRA_VERIFY_TLS`, `VCFA_VERIFY_TLS` and `SYNC_VERIFY_TLS` (true/false) are the default of each "Verify the TLS certificate?" question (`Get-FlagSetting` / `flag_setting`). `VRA_DOMAINS` (`all` or a comma-separated list) is the default of the domain question in the `all` step. The `domains` step only lists the names (`DOMAIN: <name> | users <n> | groups <m>` lines, which the page reads). Keep these identical in both languages.
+- **Browser page mirrors the scripts.** `New-RunSpec` in `Start-MigrationUI.ps1` maps each page action to the script's flags and environment variables, and `migration-ui.html` has the matching fields. A new script option is not done until it is in `New-RunSpec` (and the page, if a person types it), with a test in `Test-Ui.ps1`. The page never writes an option the scripts do not read, and never sends a value the server has not checked: the server refuses bad hosts, names with quotes or leading dashes, relative folders, tokens with spaces, and `load-apply` without `yes`.
+- **Browser page safety rules (keep them).** Secrets go to the child process only (`ProcessStartInfo.EnvironmentVariables`, never the command line, a file or the log). Child stdin is redirected so a script never waits for a prompt. Exit codes come from the `Process` object: `Start-Process` gives an empty `ExitCode` when output is redirected in 5.1. Only the Sync `apply` step opens a console window (`Start-Process`), because its own typed-`yes` gate needs a terminal. Do not pass `-Apply` or a confirmation switch to it.
+- **Browser page gotchas (each one bit during the build):** `$script:Port` and the `-Port` parameter are the same variable in script scope (the state is `$script:ListenPort`); `$args` is an automatic variable (use `$argList`); `classList.add("")` throws in the page; `perl -n` with several `print unless` statements prints each line once per statement (edit with `Edit` instead).
 
 ## Domain facts worth remembering
 
@@ -96,7 +103,7 @@ This folder's `.gitignore` excludes `*.json`, `*.txt` and `*-report.html` (the r
 
 ## Status and next steps
 
-Done: PowerShell port of both scripts with parity to Python (123 + 161 unit assertions, 46 integration assertions, all passing; Python 86 tests), HTML reports for the export and the load with parity between languages, export, loader (role sync), interactive prompts in both scripts, project-only users included in the import, default load of groups plus users whose roles are not inherited (`--groups-only`, `--users`, `--only` to change it), tolerant role-name matching with a printed role mapping, role-parity guard and post-apply check.
+Done: PowerShell port of both scripts with parity to Python (123 + 161 unit assertions, 46 integration assertions, all passing; Python 86 tests), HTML reports for the export and the load with parity between languages, export, loader (role sync), interactive prompts in both scripts, project-only users included in the import, default load of groups plus users whose roles are not inherited (`--groups-only`, `--users`, `--only` to change it), tolerant role-name matching with a printed role mapping, role-parity guard and post-apply check. Browser page (`Start-MigrationUI.ps1` + `migration-ui.html`): tested with `Test-Ui.ps1` (115 checks, live server against closed ports), the token helper checked against Chrome/Edge copy formats, rendered in headless Edge at desktop width and 390px. Not yet run from the page against a real vRA, VCFA or IDM, dark mode not checked, and the Sync `apply` console path not opened from the page.
 
 The self-signed HTTPS bypass on 5.1 was checked once by hand against a throwaway self-signed TLS server (verify off = 200, verify on = rejected); it is not part of `Test-Integration.ps1` because it needs a certificate in the user store.
 

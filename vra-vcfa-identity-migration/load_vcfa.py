@@ -13,7 +13,7 @@ With no flags you get an action menu: test login / dry run / apply. With any fla
 unless --apply (or --login-only) is given. When stdin is not a terminal nothing is prompted.
 Reads vcfa-import.json from the current folder. Writes vcfa-plan.json (the exact requests) in dry-run.
 Defaults come from the env vars VCFA_HOST, VCFA_ORG, VCFA_API_TOKEN,
-VCFA_BROWSER_TOKEN or the constants below.
+VCFA_BROWSER_TOKEN, VCFA_VERIFY_TLS (true or false) or the constants below.
 """
 import argparse
 import getpass
@@ -25,10 +25,20 @@ from datetime import datetime, timezone
 
 import requests
 
+
+def flag_setting(text, default):
+    """Reads a yes/no setting from an env var: true/false, yes/no, y/n, 1/0 or on/off. Anything else gives the default."""
+    t = (text or "").strip().lower()
+    if t in ("true", "yes", "y", "1", "on"):
+        return True
+    if t in ("false", "no", "n", "0", "off"):
+        return False
+    return default
+
 # Every value below is asked for in the terminal; what you set here (or in an env var) is only the default.
 VCFA_HOST = os.environ.get("VCFA_HOST", "https://vcfa.example.com")  # e.g. "dev.vcfa.local" (https:// is added if missing; env VCFA_HOST)
 ORG = os.environ.get("VCFA_ORG", "my-org")   # tenant/org name, e.g. "finance-org" (env VCFA_ORG)
-VERIFY_TLS = False     # asked at the prompt; False accepts a self-signed certificate (lab). e.g. True for a CA-signed cert
+VERIFY_TLS = flag_setting(os.environ.get("VCFA_VERIFY_TLS"), False)  # asked at the prompt; False accepts a self-signed certificate (lab). e.g. True for a CA-signed cert (env VCFA_VERIFY_TLS)
 TIMEOUT = 30           # seconds per request (not asked); e.g. 120 for a slow appliance
 API_VERSION = os.environ.get("VCFA_API_VERSION", "40.0")  # cloudapi version (not asked); e.g. "40.0" (env VCFA_API_VERSION)
 IMPORT_FILE = "vcfa-import.json"  # asked at the prompt (or --import-file); e.g. "example-vcfa-import.json"
@@ -450,7 +460,8 @@ def main():
 
     VCFA_HOST = ask_host("VCFA host (FQDN; https:// is added for you)", VCFA_HOST, example="dev.vcfa.local")
     args.org = args.org or ask("VCFA org (tenant) name", ORG, example="finance-org")
-    verify = confirm("Verify the TLS certificate? (answer n for a self-signed certificate)", VERIFY_TLS)
+    verify = confirm("Verify the TLS certificate? (answer n for a self-signed certificate)",
+                     flag_setting(os.environ.get("VCFA_VERIFY_TLS"), VERIFY_TLS))
     s.verify = verify
     if not verify:
         requests.packages.urllib3.disable_warnings()  # type: ignore[attr-defined]

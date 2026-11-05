@@ -2,8 +2,8 @@
 
 Run it and answer the prompts (each one shows a default you can accept with Enter):
     python export_vra_identity.py              # menu: test login / list users / list groups / full export
-    python export_vra_identity.py login        # skip the menu: login|users|groups|all
-Defaults come from the env vars VRA_HOST, VRA_USERNAME, VRA_PASSWORD, VRA_DOMAIN or the constants below.
+    python export_vra_identity.py login        # skip the menu: login|users|groups|domains|all
+Defaults come from the env vars VRA_HOST, VRA_USERNAME, VRA_PASSWORD, VRA_DOMAIN, VRA_DOMAINS, VRA_VERIFY_TLS or the constants below.
 When stdin is not a terminal nothing is prompted and the defaults are used.
 Output files are written to the folder you run the script from.
 """
@@ -17,6 +17,24 @@ from datetime import datetime, timezone
 
 import requests
 
+
+def flag_setting(text, default):
+    """Reads a yes/no setting from an env var: true/false, yes/no, y/n, 1/0 or on/off. Anything else gives the default."""
+    t = (text or "").strip().lower()
+    if t in ("true", "yes", "y", "1", "on"):
+        return True
+    if t in ("false", "no", "n", "0", "off"):
+        return False
+    return default
+
+
+def domain_list(text):
+    """'all' or blank = no filter (empty list); otherwise the comma-separated names, trimmed."""
+    t = (text or "").strip()
+    if not t or t.lower() == "all":
+        return []
+    return [d.strip() for d in t.split(",") if d.strip()]
+
 # ---- Config -----------------------------------------------------------------
 # Every value below is asked for in the terminal; what you set here (or in an env var) is only the default.
 VRA_HOST = os.environ.get("VRA_HOST", "https://vra.example.com")  # e.g. "dev.vra.local" (https:// is added if missing; env VRA_HOST)
@@ -25,8 +43,8 @@ PASSWORD = ""          # leave empty to be prompted; never commit it (env VRA_PA
 DOMAIN = ""            # vIDM domain the login account belongs to, e.g. "System Domain" or "corp.example.com" (env VRA_DOMAIN)
 # Domains to include in the export (case-insensitive), e.g. ["System Domain", "corp.example.com"]. Empty list = everything.
 # One admin login returns principals from all vIDM domains assigned to the org.
-INCLUDE_DOMAINS = ["System Domain", "corp.example.com"]  # TODO: set your custom domain
-VERIFY_TLS = False     # asked at the prompt; False accepts a self-signed certificate (lab). e.g. True for a CA-signed cert
+INCLUDE_DOMAINS = ["System Domain", "corp.example.com"]  # TODO: set your custom domain (env VRA_DOMAINS overrides it; "all" = everything)
+VERIFY_TLS = flag_setting(os.environ.get("VRA_VERIFY_TLS"), False)  # asked at the prompt; False accepts a self-signed certificate (lab). e.g. True for a CA-signed cert (env VRA_VERIFY_TLS)
 TIMEOUT = 30           # seconds per request (not asked); e.g. 120 for a slow appliance
 OUTPUT_DIR = os.getcwd()  # asked at the prompt; default is the folder you run the script from, e.g. r"C:\exports\customer1"
 
@@ -545,19 +563,34 @@ STEPS = [
     ("login", "Test login only (checks host, username, password and domain)"),
     ("users", "List users (shows raw output to check the API works)"),
     ("groups", "List groups (shows raw output to check the API works)"),
+    ("domains", "List the vIDM domains in vRA (no export; choose which to export)"),
     ("all", "Full export (writes vcfa-import.json and backups)"),
 ]
+
+
+def domain_lines(users, groups):
+    """One line per vIDM domain, in the form the browser page reads: DOMAIN: <name> | users <n> | groups <m>."""
+    user_counts, group_counts = {}, {}
+    for u in users:
+        d = principal_domain(u)
+        user_counts[d] = user_counts.get(d, 0) + 1
+    for g in groups:
+        d = principal_domain(g)
+        group_counts[d] = group_counts.get(d, 0) + 1
+    names = sorted(set(user_counts) | set(group_counts), key=str.lower)
+    return [f"DOMAIN: {d} | users {user_counts.get(d, 0)} | groups {group_counts.get(d, 0)}" for d in names]
 
 
 def main():
     global VRA_HOST, INCLUDE_DOMAINS, OUTPUT_DIR, DIRECTORY_PROVIDER_TYPE
     # Usage: python export_vra_identity.py [login|users|groups|all]   (no argument = menu)
-    step = sys.argv[1] if len(sys.argv) > 1 else choose("What do you want to do?", STEPS, default=4)
+    step = sys.argv[1] if len(sys.argv) > 1 else choose("What do you want to do?", STEPS, default=5)
     if step not in {s for s, _ in STEPS}:
         die(f"unknown step '{step}', use one of: {', '.join(s for s, _ in STEPS)}")
 
     VRA_HOST = ask_host("vRA host (FQDN; https:// is added for you)", VRA_HOST, example="dev.vra.local")
-    verify = confirm("Verify the TLS certificate? (answer n for a self-signed certificate)", VERIFY_TLS)
+    verify = confirm("Verify the TLS certificate? (answer n for a self-signed certificate)",
+                     flag_setting(os.environ.get("VRA_VERIFY_TLS"), VERIFY_TLS))
     session.verify = verify
     if not verify:
         requests.packages.urllib3.disable_warnings()  # type: ignore[attr-defined]
@@ -565,12 +598,12 @@ def main():
     password = PASSWORD or os.environ.get("VRA_PASSWORD") or ask("vRA password", secret=True)
     domain = ask("vIDM domain of the login account", os.environ.get("VRA_DOMAIN") or DOMAIN,
                  example="System Domain or corp.example.com")
-    if step != "login":
+    if step not in ("login", "domains"):
         OUTPUT_DIR = ask("Folder for the output files", OUTPUT_DIR, example=r"C:\exports\customer1")
     if step == "all":
-        shown = ", ".join(INCLUDE_DOMAINS) or "all"
+        shown = os.environ.get("VRA_DOMAINS") or ", ".join(INCLUDE_DOMAINS) or "all"
         answer = ask("Domains to export (comma-separated, or 'all')", shown, example="corp.example.com, System Domain")
-        INCLUDE_DOMAINS = [] if answer.lower() == "all" else [d.strip() for d in answer.split(",") if d.strip()]
+        INCLUDE_DOMAINS = domain_list(answer)
         DIRECTORY_PROVIDER_TYPE = ask("How VCFA authenticates directory users/groups (OAUTH, LDAP or SAML)",
                                       DIRECTORY_PROVIDER_TYPE).upper()
         if DIRECTORY_PROVIDER_TYPE not in ("OAUTH", "LDAP", "SAML"):
@@ -583,6 +616,18 @@ def main():
     org = get_org_id(csp_token)
     print(f"LOGIN OK. Org: {org}")
     if step == "login":
+        return
+
+    if step == "domains":
+        print("Fetching users and groups to list their domains ...")
+        _, all_users = first_working(USER_PATHS, org, csp_token)
+        _, all_groups = first_working(GROUP_PATHS, org, csp_token)
+        print("Domains in vRA (set VRA_DOMAINS to all, or to a comma-separated list of these names):")
+        lines = domain_lines(all_users, all_groups)
+        if not lines:
+            print("  No users or groups were found, so there are no domains.")
+        for line in lines:
+            print(line)
         return
 
     if step in ("users", "groups"):

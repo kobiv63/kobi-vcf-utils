@@ -46,7 +46,7 @@
 
 .NOTES
     Defaults come from the env vars VCFA_HOST, VCFA_ORG, VCFA_API_TOKEN,
-    VCFA_BROWSER_TOKEN, VCFA_API_VERSION or the settings below. When input is redirected nothing is prompted.
+    VCFA_BROWSER_TOKEN, VCFA_API_VERSION, VCFA_VERIFY_TLS (true or false) or the settings below. When input is redirected nothing is prompted.
     If scripts are blocked:  powershell -ExecutionPolicy Bypass -File .\Import-Vcfa.ps1
 #>
 [CmdletBinding()]
@@ -72,7 +72,7 @@ $script:VcfaHost = 'https://vcfa.example.com'   # e.g. 'dev.vcfa.local' (https:/
 if ($env:VCFA_HOST) { $script:VcfaHost = $env:VCFA_HOST }
 $script:OrgName = 'my-org'                       # tenant/org name, e.g. 'finance-org' (env VCFA_ORG)
 if ($env:VCFA_ORG) { $script:OrgName = $env:VCFA_ORG }
-$script:VerifyTls = $false   # asked at the prompt; $false accepts a self-signed certificate (lab). e.g. $true for a CA-signed cert
+$script:VerifyTls = $false   # asked at the prompt; $false accepts a self-signed certificate (lab). e.g. $true for a CA-signed cert (env VCFA_VERIFY_TLS)
 $script:TimeoutSec = 30      # seconds per request (not asked); e.g. 120 for a slow appliance
 $script:ApiVersion = '40.0'  # cloudapi version (not asked); e.g. '40.0' (env VCFA_API_VERSION)
 if ($env:VCFA_API_VERSION) { $script:ApiVersion = $env:VCFA_API_VERSION }
@@ -197,6 +197,14 @@ function Read-HostUrl([string]$Label, [string]$Default = '', [string]$Example = 
 }
 
 # ---- HTTP -------------------------------------------------------------------
+function Get-FlagSetting([string]$Text, [bool]$Default) {
+    # Reads a yes/no setting from an env var: true/false, yes/no, y/n, 1/0 or on/off. Anything else gives the default.
+    $t = ([string]$Text).Trim().ToLower()
+    if ($t -in @('true', 'yes', 'y', '1', 'on')) { return $true }
+    if ($t -in @('false', 'no', 'n', '0', 'off')) { return $false }
+    return $Default
+}
+
 function Set-TlsPolicy([bool]$Verify) {
     $script:VerifyTls = $Verify
     if ($PSVersionTable.PSVersion.Major -lt 6) {
@@ -752,7 +760,7 @@ function Main {
 
     $script:VcfaHost = Read-HostUrl 'VCFA host (FQDN; https:// is added for you)' $script:VcfaHost 'dev.vcfa.local'
     if (-not $org) { $org = Read-Value 'VCFA org (tenant) name' $script:OrgName -Example 'finance-org' }
-    Set-TlsPolicy (Confirm-Yes 'Verify the TLS certificate? (answer n for a self-signed certificate)' $script:VerifyTls)
+    Set-TlsPolicy (Confirm-Yes 'Verify the TLS certificate? (answer n for a self-signed certificate)' (Get-FlagSetting $env:VCFA_VERIFY_TLS $script:VerifyTls))
     if (-not $ImportFile) { $script:ImportPath = Read-Value 'Import file to load' $script:ImportPath -Example 'vcfa-import.json' }
     if (-not $org) { Die 'set the tenant with -Org <name> or VCFA_ORG' }
 

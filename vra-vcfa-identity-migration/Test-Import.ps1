@@ -305,6 +305,8 @@ Assert-Equal $r.Error $null 'flags: prompts only for what is missing'
 Assert-Equal $r.Logins[0].Text 'pasted-token' '-BrowserToken: asks for the token when it is not set'
 Assert-Equal $r.ImportRead 'my-import.json' 'prompt: import file is asked'
 Assert-Equal $r.Tls $false 'prompt: TLS verification is asked'
+$r = Invoke-Scenario -Params $BT -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', 'my-import.json', 'pasted-token') -Env @{ VCFA_BROWSER_TOKEN = ''; VCFA_VERIFY_TLS = 'true' }
+Assert-Equal $r.Tls $true 'prompt: an empty answer takes VCFA_VERIFY_TLS'
 Assert-Equal $script:VcfaHost 'https://dev.vcfa.local' 'prompt: host is normalised to https'
 $r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '1', 'tok-from-wizard', '1', '', '1') -Env @{ VCFA_BROWSER_TOKEN = '' }
 Assert-Equal $r.Error $null 'wizard: login only run'

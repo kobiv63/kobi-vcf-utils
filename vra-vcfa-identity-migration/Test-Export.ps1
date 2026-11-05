@@ -98,6 +98,18 @@ Assert-True (-not (Test-InScope $SYS_USER)) 'scope: out of selected domain'
 $script:IncludeDomains = @()
 Assert-True (Test-InScope $SYS_USER) 'scope: empty list = everything'
 
+# ---- Env settings, domain list and the domains step ------------------------
+Assert-True (Get-FlagSetting 'TRUE' $false) 'flag: env true (any case)'
+Assert-True (-not (Get-FlagSetting 'off' $true)) 'flag: env off'
+Assert-True (Get-FlagSetting 'maybe' $true) 'flag: unknown text keeps the default'
+Assert-True (-not (Get-FlagSetting '' $false)) 'flag: blank keeps the default'
+Assert-Equal @(ConvertTo-DomainList 'ALL').Count 0 'domains: all = no filter'
+Assert-Equal @(ConvertTo-DomainList ' corp.example.com , System Domain ,') @('corp.example.com', 'System Domain') 'domains: list trimmed, blanks dropped'
+$domLines = @(Get-DomainLines @($USER, $SYS_USER) @($GROUP))
+Assert-Equal $domLines.Count 2 'domain lines: one per domain'
+Assert-Equal $domLines[0] 'DOMAIN: corp.example.com | users 1 | groups 1' 'domain lines: counts, sorted without case'
+Assert-Equal $domLines[1] 'DOMAIN: System Domain | users 1 | groups 0' 'domain lines: system domain'
+
 # ---- Shaping ----------------------------------------------------------------
 $s = Get-Summary (Copy-Obj $USER)
 Assert-Equal $s['serviceRoles'] @('catalog:user') 'summary: ignored service roles removed'

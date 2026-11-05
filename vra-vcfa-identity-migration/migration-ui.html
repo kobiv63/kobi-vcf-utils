@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vRA to VCFA identity migration</title>
+<meta name="ui-token" content="__UI_TOKEN__">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --surface-2: #eef1ee;
+  --ink: #1c2226;
+  --ink-2: #4a5560;
+  --line: #d3d9d4;
+  --accent: #0e5a58;
+  --accent-ink: #ffffff;
+  --done: #1d6b3c;
+  --caution: #7a5200;
+  --caution-bg: #fbf1d9;
+  --bad: #9b2226;
+  --bad-bg: #fbe8e8;
+  --focus: #1f6fd1;
+  --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  --ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111416;
+    --surface: #1a1f22;
+    --surface-2: #22292c;
+    --ink: #e4e9e6;
+    --ink-2: #a7b2ac;
+    --line: #36403f;
+    --accent: #5fb8b3;
+    --accent-ink: #0c1716;
+    --done: #7cc596;
+    --caution: #e8c46b;
+    --caution-bg: #302914;
+    --bad: #f08a8d;
+    --bad-bg: #3a1c1e;
+    --focus: #8ab8ff;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111416; --surface: #1a1f22; --surface-2: #22292c; --ink: #e4e9e6; --ink-2: #a7b2ac;
+  --line: #36403f; --accent: #5fb8b3; --accent-ink: #0c1716; --done: #7cc596; --caution: #e8c46b;
+  --caution-bg: #302914; --bad: #f08a8d; --bad-bg: #3a1c1e; --focus: #8ab8ff;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--ui);
+  padding: 0 0 4rem;
+}
+h1 { font-size: 1.4rem; font-weight: 600; margin: 0; }
+h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .35rem; }
+p { margin: .4rem 0; }
+ul, ol { padding-left: 1.2rem; margin: .4rem 0; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+a { color: var(--accent); }
+.hint { color: var(--ink-2); font-size: .9rem; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.topbar .inner {
+  max-width: 980px; margin: 0 auto; padding: .7rem 16px;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.topbar .sub { color: var(--ink-2); font-size: .9rem; }
+.topbar .spacer { flex: 1; }
+
+.wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+.banner {
+  border: 1px solid var(--caution); background: var(--caution-bg); color: var(--ink);
+  border-radius: 8px; padding: .7rem .9rem; margin-bottom: 1rem; display: none;
+}
+.banner.show { display: block; }
+
+/* Cards and form */
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 16px 18px; margin-bottom: 12px;
+}
+.card + .card { margin-top: 0; }
+.grid { display: grid; gap: 12px 14px; grid-template-columns: 1fr 1fr; }
+.grid .wide { grid-column: 1 / -1; }
+@media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+label, .label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
+input[type="text"], input[type="password"], input[type="url"], textarea, select {
+  width: 100%; font: 15px var(--ui); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: .5rem .6rem;
+}
+input[type="text"].mono, input[type="password"].mono, textarea.mono { font-family: var(--mono); font-size: .88rem; }
+textarea { min-height: 4.5rem; resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--ink-2); opacity: .75; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+legend { font-weight: 600; font-size: .9rem; padding: 0; margin-bottom: .3rem; }
+.choice { display: flex; gap: .5rem; align-items: flex-start; margin: .3rem 0; }
+.choice input { margin-top: .3rem; }
+.choice span { display: block; }
+.choice small { color: var(--ink-2); display: block; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; align-items: center; }
+.btn {
+  font: 600 15px var(--ui); border-radius: 6px; padding: .5rem .9rem; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--surface); color: var(--accent);
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.caution { border-color: var(--caution); color: var(--caution); }
+.btn.quiet { border-color: var(--line); color: var(--ink-2); font-weight: 500; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.msg { margin: .6rem 0 0; min-height: 0; font-size: .92rem; }
+.msg:empty { display: none; }
+.msg.ok { color: var(--done); }
+.msg.bad { color: var(--bad); }
+.msg.warn { color: var(--caution); }
+.check { display: flex; gap: .5rem; align-items: flex-start; margin: .4rem 0; }
+.check input { margin-top: .3rem; }
+.note {
+  border-left: 3px solid var(--caution); background: var(--caution-bg);
+  padding: .55rem .75rem; border-radius: 0 6px 6px 0; margin: .7rem 0; font-size: .92rem;
+}
+.note.info { border-color: var(--accent); background: var(--surface-2); }
+.token-status { font-size: .92rem; margin-top: .4rem; }
+.token-status.have { color: var(--done); }
+.token-status.none { color: var(--ink-2); }
+.token-status.bad { color: var(--bad); }
+
+/* Help accordions */
+details.help { border: 1px solid var(--line); border-radius: 8px; margin-top: .8rem; background: var(--surface-2); }
+details.help > summary { cursor: pointer; padding: .55rem .75rem; font-weight: 600; font-size: .92rem; }
+details.help > div { padding: 0 .9rem .8rem; font-size: .92rem; }
+details.help ol li { margin: .35rem 0; }
+details.help img { max-width: 100%; }
+
+/* Stepper rail */
+.steps { list-style: none; padding: 0; margin: 0; position: relative; }
+.step {
+  display: grid; grid-template-columns: 2.4rem 1fr; column-gap: 12px;
+  position: relative; padding-bottom: 14px;
+}
+.step:last-child { padding-bottom: 0; }
+.step::after {
+  content: ""; position: absolute; left: calc(1.2rem - 1px); top: 2.4rem; bottom: 0;
+  width: 2px; background: var(--line);
+}
+.step:last-child::after { display: none; }
+.step.done::after { background: var(--done); }
+.marker {
+  width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 2px solid var(--line);
+  background: var(--surface); display: grid; place-items: center; font-weight: 600; color: var(--ink-2);
+}
+.step.next .marker { border-color: var(--accent); color: var(--accent); }
+.step.done .marker { background: var(--done); border-color: var(--done); color: var(--surface); }
+.step.failed .marker { border-color: var(--bad); color: var(--bad); }
+.step-body { min-width: 0; }
+.step-head { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: baseline; margin: .35rem 0 .4rem; }
+.state { font-size: .85rem; color: var(--ink-2); }
+.step.done .state { color: var(--done); }
+.step.failed .state { color: var(--bad); }
+.step.next .state { color: var(--accent); font-weight: 600; }
+.optional { font-size: .85rem; color: var(--ink-2); }
+
+/* Output drawer */
+.drawer {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  background: var(--surface); border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 14px rgba(0,0,0,.08);
+}
+.drawer-bar {
+  display: flex; align-items: center; gap: .6rem; padding: .5rem 16px; flex-wrap: wrap;
+  max-width: 980px; margin: 0 auto;
+}
+.drawer-bar .title { font-weight: 600; }
+.pill { font-size: .82rem; padding: .1rem .55rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
+.pill.running { border-color: var(--accent); color: var(--accent); }
+.pill.ok { border-color: var(--done); color: var(--done); }
+.pill.bad { border-color: var(--bad); color: var(--bad); }
+.drawer-bar .spacer { flex: 1; }
+.log {
+  font-family: var(--mono); font-size: .84rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word;
+  max-height: 34vh; overflow: auto; margin: 0; padding: .6rem 16px 1rem; background: var(--surface-2);
+  border-top: 1px solid var(--line); max-width: none;
+}
+.log .err { color: var(--bad); }
+.log .sys { color: var(--ink-2); font-style: italic; }
+.drawer.collapsed .log { display: none; }
+.log:empty::before { content: "Output appears here when a step runs."; color: var(--ink-2); }
+body { padding-bottom: 3.2rem; }
+body.drawer-open { padding-bottom: 36vh; }
+
+.setup-list { list-style: none; padding: 0; margin: .5rem 0 0; font-size: .92rem; }
+.setup-list li { display: flex; gap: .5rem; margin: .2rem 0; }
+.setup-list .tick { width: 1.1rem; text-align: center; font-weight: 700; }
+.setup-list .tick.yes { color: var(--done); }
+.setup-list .tick.no { color: var(--bad); }
+.setup-list .tick.opt { color: var(--ink-2); }
+.summary { font-size: .92rem; margin: .4rem 0 0; }
+.summary dt { color: var(--ink-2); float: left; clear: left; width: 10rem; }
+.summary dd { margin: 0 0 .15rem 10rem; }
+.hidden { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 640px) {
+  .step { grid-template-columns: 2rem 1fr; column-gap: 10px; }
+  .marker { width: 2rem; height: 2rem; }
+  .step::after { left: calc(1rem - 1px); top: 2rem; }
+  .summary dt { float: none; width: auto; }
+  .summary dd { margin-left: 0; }
+}
+.domains-head { display: flex; gap: .75rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.domains-head .hint { margin: 0; flex: 1 1 18rem; }
+.domain-list { border: 0; padding: 0; margin: .5rem 0 0; }
+.domain-list[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="inner">
+    <h1>vRA to VCFA identity migration</h1>
+    <span class="sub" id="top-sub">Runs the scripts in this folder on this computer.</span>
+    <span class="spacer"></span>
+    <button class="btn quiet" id="btn-forget" type="button">Forget passwords and tokens</button>
+    <button class="btn quiet" id="btn-stop" type="button">Stop the UI</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="banner" id="banner" role="alert"></div>
+
+  <section class="card" aria-labelledby="setup-h">
+    <h2 id="setup-h">Setup</h2>
+    <p class="hint">Every step writes its files into the output folder. Reports and exports hold real user names, so keep the folder private.</p>
+    <div class="grid">
+      <div class="wide">
+        <label for="folder">Output folder</label>
+        <input type="text" id="folder" class="mono" placeholder="C:\exports\customer1">
+        <p class="hint" id="folder-hint"></p>
+      </div>
+      <fieldset class="wide">
+        <legend>Engine for the vRA export and the VCFA load</legend>
+        <label class="choice"><input type="radio" name="engine" value="powershell" checked>
+          <span>PowerShell (recommended)<small>Needs nothing to install. Windows PowerShell 5.1 or PowerShell 7.</small></span></label>
+        <label class="choice"><input type="radio" name="engine" value="python" id="engine-python">
+          <span>Python<small>Needs Python 3 with the <code>requests</code> package. The identity source step always uses PowerShell.</small></span></label>
+      </fieldset>
+      <div class="wide">
+        <label class="choice"><input type="checkbox" id="verify-tls">
+          <span>Verify the TLS certificates<small>Turn this on when vRA, VCFA, IDM and VCF Operations use a certificate from a trusted authority. Leave it off for a lab with a self-signed certificate.</small></span></label>
+      </div>
+    </div>
+    <ul class="setup-list" id="checks" aria-label="What was found"></ul>
+  </section>
+
+  <ol class="steps" id="steps">
+
+    <!-- Step 0: identity source -->
+    <li class="step" data-step="0" id="step-0">
+      <span class="marker" aria-hidden="true">0</span>
+      <div class="step-body">
+        <div class="step-head">
+          <h2>Make the AD groups visible to VCF Operations</h2>
+          <span class="state" data-state></span>
+        </div>
+        <div class="card">
+          <p>Skip this if the groups are already provisioned in VCF Operations. The steps below only read, except the last one, which opens a PowerShell window and asks before it writes anything.</p>
+          <div class="grid">
+            <div>
+              <label for="idm-host">IDM host</label>
+              <input type="text" id="idm-host" placeholder="ca-idm.corp.local">
+            </div>
+            <div>
+              <label for="ops-host">VCF Operations host</label>
+              <input type="text" id="ops-host" placeholder="vcf-ops01.corp.local">
+            </div>
+            <fieldset>
+              <legend>Log in to IDM with</legend>
+              <label class="choice"><input type="radio" name="idm-method" value="password" checked><span>Username and password</span></label>
+              <label class="choice"><input type="radio" name="idm-method" value="token"><span>Browser token</span></label>
+            </fieldset>
+            <fieldset>
+              <legend>Log in to VCF Operations with</legend>
+              <label class="choice"><input type="radio" name="ops-method" value="password" checked><span>Username and password</span></label>
+              <label class="choice"><input type="radio" name="ops-method" value="token"><span>Browser token</span></label>
+            </fieldset>
+            <div class="idm-pw">
+              <label for="idm-user">IDM username</label>
+              <input type="text" id="idm-user" placeholder="admin">
+            </div>
+            <div class="idm-pw">
+              <label for="idm-pass">IDM password</label>
+              <input type="password" id="idm-pass" autocomplete="off">
+            </div>
+            <div class="ops-pw">
+              <label for="ops-user">VCF Operations username</label>
+              <input type="text" id="ops-user" placeholder="admin">
+            </div>
+            <div class="ops-pw">
+              <label for="ops-pass">VCF Operations password</label>
+              <input type="password" id="ops-pass" autocomplete="off">
+            </div>
+            <div class="ops-pw">
+              <label for="ops-auth">VCF Operations auth source</label>
+              <input type="text" id="ops-auth" placeholder="VCF SSO">
+              <p class="hint">Leave blank for a local user. SSO users use the source name, for example VCF SSO.</p>
+            </div>
+            <div>
+              <label for="sso-id">SSO domain ID (optional)</label>
+              <input type="text" id="sso-id" class="mono" placeholder="00000000-0000-0000-0000-000000000000">
+              <p class="hint">Only needed when VCF Operations has more than one SSO domain. It is the ID in the address of the identity source page.</p>
+            </div>
+            <div class="wide idm-tok">
+              <label for="idm-tok-in">IDM browser token</label>
+              <textarea id="idm-tok-in" class="mono" placeholder="Paste the copied request or the token"></textarea>
+              <div class="token-status none" data-token-status="idm"></div>
+            </div>
+            <div class="wide ops-tok">
+              <label for="ops-tok-in">VCF Operations browser token</label>
+              <textarea id="ops-tok-in" class="mono" placeholder="Paste the copied request or the token"></textarea>
+              <div class="token-status none" data-token-status="ops"></div>
+            </div>
+          </div>
+          <details class="help">
+            <summary>How to get a browser token for IDM or VCF Operations</summary>
+            <div>
+              <ol>
+                <li>Open the system in Edge or Chrome and sign in.</li>
+                <li>Press F12, then open the Network tab.</li>
+                <li>In the page, click something (open a list) so requests show up.</li>
+                <li>Right-click any request to that host, choose Copy, then Copy as fetch.</li>
+                <li>Paste the whole text into the box above. The page takes the token out for you.</li>
+              </ol>
+              <p class="hint">IDM tokens start with HZN, VCF Operations tokens with OpsToken or Bearer. Any of them is accepted. A token expires within minutes, so copy a fresh one right before you run a step.</p>
+            </div>
+          </details>
+          <div class="actions">
+            <button class="btn" type="button" data-run="sync-login">Test both logins</button>
+            <button class="btn" type="button" data-run="sync-extract">Read the base DNs</button>
+            <button class="btn" type="button" data-run="sync-compare">Compare (read only)</button>
+            <button class="btn caution" type="button" data-run="sync-apply-console">Add a missing base DN (opens a window)</button>
+          </div>
+          <p class="msg" data-msg></p>
+          <div class="note info">The last button opens a PowerShell window. The script lists the base DNs that are missing, asks which to add, does a dry run unless you choose Write, and needs you to type <code>yes</code> there. Nothing is written from this page.</div>
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 1: read vRA -->
+    <li class="step" data-step="1" id="step-1">
+      <span class="marker" aria-hidden="true">1</span>
+      <div class="step-body">
+        <div class="step-head">
+          <h2>Read vRA</h2>
+          <span class="state" data-state></span>
+        </div>
+        <div class="card">
+          <p>Reads users, groups and roles from vRA. It changes nothing in vRA. The result is an import file for step 3.</p>
+          <div class="grid">
+            <div>
+              <label for="vra-host">vRA host</label>
+              <input type="text" id="vra-host" placeholder="dev.vra.local">
+            </div>
+            <div>
+              <label for="vra-user">vRA username</label>
+              <input type="text" id="vra-user" placeholder="configurationadmin">
+            </div>
+            <div>
+              <label for="vra-pass">vRA password</label>
+              <input type="password" id="vra-pass" autocomplete="off">
+              <p class="hint">Kept in this page only. It is not saved.</p>
+            </div>
+            <div>
+              <label for="vra-domain">vIDM domain of the login account</label>
+              <input type="text" id="vra-domain" placeholder="System Domain">
+            </div>
+            <div class="wide">
+              <label for="vra-proj-domain">Domain for project-only users (optional)</label>
+              <input type="text" id="vra-proj-domain" placeholder="corp.example.com">
+              <p class="hint">Project members come back as bare names. Set the domain they belong to, or leave it blank to skip them.</p>
+            </div>
+          </div>
+          <div class="domains">
+            <div class="domains-head">
+              <p class="hint">Which vRA domains to export. Find them first, then untick any you want to leave out. Until you find them, all domains are exported.</p>
+              <button class="btn" type="button" data-run="export-domains">Find the domains</button>
+            </div>
+            <fieldset class="domain-list" id="domain-list" hidden>
+              <legend>Domains to export</legend>
+              <div id="domain-items"></div>
+            </fieldset>
+          </div>
+          <div class="actions">
+            <button class="btn" type="button" data-run="export-login">Test the login</button>
+            <button class="btn primary" type="button" data-run="export-all">Export</button>
+            <button class="btn quiet" type="button" data-open="vra-export-report.html" disabled>Open the export report</button>
+          </div>
+          <p class="msg" data-msg></p>
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 2: connect VCFA -->
+    <li class="step" data-step="2" id="step-2">
+      <span class="marker" aria-hidden="true">2</span>
+      <div class="step-body">
+        <div class="step-head">
+          <h2>Connect to VCFA</h2>
+          <span class="state" data-state></span>
+        </div>
+        <div class="card">
+          <p>VCFA needs a token. Choose how you want to sign in, then test the connection.</p>
+          <div class="grid">
+            <div>
+              <label for="vcfa-host">VCFA host</label>
+              <input type="text" id="vcfa-host" placeholder="vcfa.corp.local">
+            </div>
+            <div>
+              <label for="vcfa-org">Organization (tenant) name</label>
+              <input type="text" id="vcfa-org" placeholder="finance-org">
+            </div>
+            <fieldset class="wide">
+              <legend>Sign in with</legend>
+              <label class="choice"><input type="radio" name="vcfa-method" value="browser" checked>
+                <span>Browser token (quick, expires within minutes)<small>Copy it from the browser right before you run a step.</small></span></label>
+              <label class="choice"><input type="radio" name="vcfa-method" value="api">
+                <span>API token (lasts longer)<small>Create it in the VCFA interface. Treat it like a password.</small></span></label>
+            </fieldset>
+            <div class="wide">
+              <label for="vcfa-tok-in">Token</label>
+              <textarea id="vcfa-tok-in" class="mono" placeholder="Paste the copied request, or only the token"></textarea>
+              <div class="token-status none" data-token-status="vcfa"></div>
+            </div>
+          </div>
+          <details class="help" open>
+            <summary>How to get the browser token from the browser</summary>
+            <div>
+              <ol>
+                <li>Open the VCFA organization in Edge or Chrome and sign in.</li>
+                <li>Press F12 to open the developer tools, then open the <strong>Network</strong> tab.</li>
+                <li>In the VCFA page, click something (open the organizations list). Requests appear in the list.</li>
+                <li>Type <code>cloudapi</code> in the filter box of the Network tab.</li>
+                <li>Right-click any request, choose <strong>Copy</strong>, then <strong>Copy as fetch</strong>. Copy as cURL also works.</li>
+                <li>Click the token box above and paste with Ctrl+V. The whole text is fine here. The page takes out the token and shows <em>Token found</em>.</li>
+              </ol>
+              <p><strong>Without copying the whole request:</strong> click one request, open the <strong>Headers</strong> tab, find <code>authorization</code> under Request Headers, and copy only the long text after <code>Bearer </code>.</p>
+              <div class="note">A browser token expires within minutes. If a step says the login failed, copy a new one and run the step again.</div>
+            </div>
+          </details>
+          <details class="help">
+            <summary>How to get an API token</summary>
+            <div>
+              <p>Create an API token in the VCFA interface, copy it once, and paste it into the box above. Choose <em>API token</em> in the list before you test. An API token does not expire within minutes, so it suits longer sessions. Delete it in VCFA when you are done.</p>
+            </div>
+          </details>
+          <div class="actions">
+            <button class="btn primary" type="button" data-run="load-login">Test the connection</button>
+          </div>
+          <p class="msg" data-msg></p>
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 3: dry run -->
+    <li class="step" data-step="3" id="step-3">
+      <span class="marker" aria-hidden="true">3</span>
+      <div class="step-body">
+        <div class="step-head">
+          <h2>Dry run: see what would be created</h2>
+          <span class="state" data-state></span>
+        </div>
+        <div class="card">
+          <p>Reads the import file and shows the plan. Nothing is created in VCFA.</p>
+          <div class="grid">
+            <div class="wide">
+              <label for="import-file">Import file</label>
+              <input type="text" id="import-file" class="mono" value="vcfa-import.json">
+              <p class="hint" id="import-hint"></p>
+            </div>
+            <fieldset class="wide">
+              <legend>What to load</legend>
+              <label class="choice"><input type="radio" name="scope" value="free" checked>
+                <span>Everything needed (recommended)<small>All groups, plus the users whose roles no group gives them.</small></span></label>
+              <label class="choice"><input type="radio" name="scope" value="groups">
+                <span>Groups only<small>No users at all. Users then get their roles from their groups at login.</small></span></label>
+              <label class="choice"><input type="radio" name="scope" value="users">
+                <span>All users, even those with no roles<small>Every user in the file.</small></span></label>
+              <label class="choice"><input type="radio" name="scope" value="only">
+                <span>Only the names below<small>One group or user per line. The name must match the export exactly.</small></span></label>
+            </fieldset>
+            <div class="wide hidden" id="only-wrap">
+              <label for="only-names">Names to load</label>
+              <textarea id="only-names" class="mono" placeholder="Infra-Admins@corp.example.com&#10;olga@corp.example.com"></textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="button" data-run="load-dry">Run the dry run</button>
+            <button class="btn quiet" type="button" data-open="vcfa-load-report.html" disabled>Open the load report</button>
+          </div>
+          <p class="msg" data-msg></p>
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 4: apply -->
+    <li class="step" data-step="4" id="step-4">
+      <span class="marker" aria-hidden="true">4</span>
+      <div class="step-body">
+        <div class="step-head">
+          <h2>Create the groups and users in VCFA</h2>
+          <span class="state" data-state></span>
+        </div>
+        <div class="card">
+          <p>Creates what the dry run listed. Existing groups and users are not recreated, and missing roles are added. Roles are never removed. Group membership is not copied: VCFA takes it from the identity provider at each login.</p>
+          <dl class="summary" id="apply-summary"></dl>
+          <div class="note hidden" id="apply-stale">The scope or import file changed since your last dry run. Run the dry run again before you create anything.</div>
+          <div class="check">
+            <input type="checkbox" id="apply-read">
+            <label for="apply-read" style="font-weight:400">I read the dry run output and the load report.</label>
+          </div>
+          <div class="check">
+            <input type="checkbox" id="allow-missing">
+            <label for="allow-missing" style="font-weight:400">Add roles that VCFA does not have yet (only if the dry run listed them).</label>
+          </div>
+          <div style="margin-top:.6rem; max-width:20rem">
+            <label for="confirm-yes">Type <code>yes</code> to confirm</label>
+            <input type="text" id="confirm-yes" autocomplete="off" class="mono">
+          </div>
+          <div class="actions">
+            <button class="btn caution" type="button" data-run="load-apply" id="btn-apply" disabled>Create in VCFA</button>
+            <button class="btn quiet" type="button" data-open="vcfa-load-report.html" disabled>Open the load report</button>
+          </div>
+          <p class="msg" data-msg></p>
+        </div>
+      </div>
+    </li>
+  </ol>
+</main>
+
+<section class="drawer collapsed" id="drawer" aria-label="Output">
+  <div class="drawer-bar">
+    <span class="title" id="drawer-title">No step has run</span>
+    <span class="pill hidden" id="drawer-pill"></span>
+    <span class="spacer"></span>
+    <button class="btn quiet" type="button" id="btn-cancel" hidden>Cancel the step</button>
+    <button class="btn quiet" type="button" id="btn-clear">Clear</button>
+    <button class="btn quiet" type="button" id="btn-toggle" aria-expanded="false">Show output</button>
+  </div>
+  <pre class="log" id="log" aria-live="polite"></pre>
+</section>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN = document.querySelector('meta[name="ui-token"]').getAttribute("content");
+  var PREF_KEY = "vcfMigrationUi.prefs";
+  var STEP_ACTIONS = { 0: ["sync-extract", "sync-compare"], 1: ["export-all"], 2: ["load-login"], 3: ["load-dry"], 4: ["load-apply"] };
+  var TITLES = {
+    "sync-login": "Test both logins", "sync-extract": "Read the base DNs", "sync-compare": "Compare the base DNs",
+    "sync-apply-console": "Add a base DN (console window)", "export-login": "Test the vRA login",
+    "export-all": "Export from vRA", "export-domains": "List the vRA domains", "load-login": "Test the VCFA connection",
+    "load-dry": "VCFA dry run", "load-apply": "Create in VCFA"
+  };
+  var CONSOLE_ACTIONS = { "sync-apply-console": true };
+  var PREF_FIELDS = ["folder", "vra-host", "vra-user", "vra-domain", "vra-proj-domain", "vcfa-host", "vcfa-org",
+    "import-file", "idm-host", "idm-user", "ops-host", "ops-user", "ops-auth", "sso-id"];
+  var PREF_RADIOS = ["engine", "vcfa-method", "scope", "idm-method", "ops-method"];
+
+  var tokens = { vcfa: "", idm: "", ops: "" };
+  var domainState = { found: [], picked: {} };   // vRA domains from "Find the domains" (names and counts, no personal data)
+  var lastDry = null;
+  var info = null;
+  var jobs = [];
+  var activeJob = null;   // { id, action, title, after, timer }
+  var connected = true;
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ""; }
+  function radio(name) { var el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
+  function checked(id) { var el = document.getElementById(id); return !!(el && el.checked); }
+  function setText(el, text) { el.textContent = text; }
+
+  // ---- Token extraction (mirrors the scripts: a whole copied request, a header, or a raw token)
+  function extractToken(text) {
+    var t = (text || "").trim();
+    if (!t) return { ok: false, token: "", message: "" };
+    var m = /authorization["']?\s*[:=,]\s*["']?(?:HZN|Bearer|OpsToken|vRealizeOpsToken)\s+([A-Za-z0-9._~+\/=\-]+)/i.exec(t);
+    if (m) return checkLength(m[1]);
+    // A bare token, possibly quoted or prefixed with "Bearer " / "HZN " / "OpsToken ".
+    t = t.replace(/^["']|["']$/g, "").replace(/^bearer\s+/i, "").replace(/^(?:HZN|OpsToken|vRealizeOpsToken)\s+/i, "");
+    if (/\s/.test(t)) {
+      return { ok: false, token: "", message: "This text has spaces or line breaks and no authorization header, so it is not a token. Copy the whole request as fetch, or only the token." };
+    }
+    return checkLength(t);
+  }
+  function checkLength(tok) {
+    if (!tok || tok.length < 20) return { ok: false, token: "", message: "That is too short to be a token. Copy the whole request, or the token after Bearer." };
+    return { ok: true, token: tok, message: "" };
+  }
+  function mask(tok) {
+    return tok.slice(0, 6) + "..." + tok.slice(-4) + " (" + tok.length + " characters)";
+  }
+  function bindToken(inputId, key, statusSel) {
+    var input = document.getElementById(inputId);
+    var status = $(statusSel);
+    function render() {
+      if (tokens[key]) {
+        status.className = "token-status have";
+        setText(status, "Token found: " + mask(tokens[key]) + ". Paste a new one to replace it.");
+      } else {
+        status.className = "token-status none";
+        setText(status, "No token yet.");
+      }
+    }
+    input.addEventListener("input", function () {
+      if (!input.value.trim()) { render(); return; }
+      var r = extractToken(input.value);
+      if (r.ok) {
+        tokens[key] = r.token;
+        input.value = "";            // keep the page free of the whole request
+        status.className = "token-status have";
+        setText(status, "Token found: " + mask(r.token) + ". Paste a new one to replace it.");
+      } else {
+        status.className = "token-status bad";
+        setText(status, r.message);
+      }
+      updateApply();
+    });
+    input.addEventListener("blur", function () { if (!input.value.trim()) render(); });
+    render();
+    return render;
+  }
+  var renderers = {};
+
+  // ---- API
+  function api(path, options) {
+    var o = options || {};
+    var init = { method: o.method || "GET", headers: { "X-UI-Token": TOKEN }, cache: "no-store" };
+    if (o.body !== undefined) {
+      init.headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(o.body);
+    }
+    return fetch(path, init).then(function (res) {
+      return res.text().then(function (text) {
+        var data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text || ("HTTP " + res.status) }; }
+        if (!res.ok) { var err = new Error(data.error || ("HTTP " + res.status)); err.status = res.status; throw err; }
+        setConnected(true);
+        return data;
+      });
+    }, function () {
+      setConnected(false);
+      throw new Error("The UI server did not answer.");
+    });
+  }
+  function setConnected(ok) {
+    if (connected === ok) return;
+    connected = ok;
+    var b = $("#banner");
+    if (ok) { b.classList.remove("show"); }
+    else {
+      setText(b, "The UI server is not answering. Start Start-MigrationUI.ps1 again, then reload this page. Anything running in the drawer keeps running in its own process.");
+      b.classList.add("show");
+    }
+  }
+
+  // ---- Preferences (no passwords or tokens)
+  function savePrefs() {
+    var p = {};
+    PREF_FIELDS.forEach(function (id) { p[id] = val(id); });
+    PREF_RADIOS.forEach(function (n) { p[n] = radio(n); });
+    p.verifyTls = checked("verify-tls");
+    p.vraDomainsFound = domainState.found;
+    p.vraDomainsPicked = domainState.picked;
+    try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch (e) { /* private window: skip */ }
+  }
+  function loadPrefs() {
+    var p = null;
+    try { p = JSON.parse(localStorage.getItem(PREF_KEY) || "null"); } catch (e) { p = null; }
+    if (!p) return;
+    PREF_FIELDS.forEach(function (id) { if (p[id] !== undefined && p[id] !== "") { var el = document.getElementById(id); if (el) el.value = p[id]; } });
+    PREF_RADIOS.forEach(function (n) {
+      if (!p[n]) return;
+      var el = document.querySelector('input[name="' + n + '"][value="' + p[n] + '"]');
+      if (el) el.checked = true;
+    });
+    var tls = document.getElementById("verify-tls");
+    if (tls && p.verifyTls !== undefined) tls.checked = !!p.verifyTls;
+    if (Array.isArray(p.vraDomainsFound)) {
+      domainState.found = p.vraDomainsFound.filter(function (d) { return d && typeof d.name === "string" && d.name; })
+        .slice(0, 500).map(function (d) { return { name: String(d.name), users: Number(d.users) || 0, groups: Number(d.groups) || 0 }; });
+      domainState.picked = (p.vraDomainsPicked && typeof p.vraDomainsPicked === "object") ? p.vraDomainsPicked : {};
+      renderDomains();
+    }
+  }
+
+  // ---- Values sent with a run (passwords and tokens are read from the page only when a step starts)
+  function listValues() {
+    return $("#only-names").value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+  // The domain choice for an export: "all" until domains are found and some are unticked.
+  // An empty string means nothing is ticked; missingFor() stops that before the server is asked.
+  function vraDomainsValue() {
+    if (!domainState.found.length) return "all";
+    var picked = domainState.found.filter(function (d) { return domainState.picked[d.name]; }).map(function (d) { return d.name; });
+    if (picked.length === domainState.found.length) return "all";
+    return picked.join(",");
+  }
+  function collect(action) {
+    return {
+      action: action,
+      engine: radio("engine") || "powershell",
+      folder: val("folder"),
+      values: {
+        vraHost: val("vra-host"), vraUsername: val("vra-user"), vraPassword: val("vra-pass"),
+        vraDomain: val("vra-domain"), vraProjectDomain: val("vra-proj-domain"),
+        vcfaHost: val("vcfa-host"), vcfaOrg: val("vcfa-org"), vcfaMethod: radio("vcfa-method") || "browser",
+        vcfaToken: tokens.vcfa, importFile: val("import-file") || "vcfa-import.json",
+        scope: radio("scope") || "free", only: radio("scope") === "only" ? listValues() : [],
+        allowMissingRoles: checked("allow-missing"), confirm: val("confirm-yes"),
+        idmHost: val("idm-host"), idmMethod: radio("idm-method") || "password", idmUsername: val("idm-user"),
+        idmPassword: val("idm-pass"), idmToken: tokens.idm,
+        opsHost: val("ops-host"), opsMethod: radio("ops-method") || "password", opsUsername: val("ops-user"),
+        opsPassword: val("ops-pass"), opsAuthSource: val("ops-auth"), opsToken: tokens.ops,
+        ssoDomainId: val("sso-id"), addBaseDn: "",
+        verifyTls: checked("verify-tls"), vraDomains: vraDomainsValue()
+      }
+    };
+  }
+
+  // ---- Client-side checks: clear messages before the server is asked
+  function missingFor(action, v) {
+    var need = [];
+    if (action === "export-login" || action === "export-all" || action === "export-domains") {
+      if (!v.vraHost) need.push("vRA host");
+      if (!v.vraUsername) need.push("vRA username");
+      if (!v.vraPassword) need.push("vRA password");
+      if (action === "export-all" && domainState.found.length && !v.vraDomains) need.push("at least one domain (ticked in step 1)");
+    } else if (action.indexOf("load-") === 0) {
+      if (!v.vcfaHost) need.push("VCFA host");
+      if (!v.vcfaOrg) need.push("organization name");
+      if (!v.vcfaToken) need.push("token (paste it in step 2)");
+    } else if (action.indexOf("sync-") === 0) {
+      if (!v.idmHost) need.push("IDM host");
+      if (!v.opsHost) need.push("VCF Operations host");
+      if (v.idmMethod === "token") { if (!v.idmToken) need.push("IDM token"); }
+      else { if (!v.idmUsername) need.push("IDM username"); if (!v.idmPassword) need.push("IDM password"); }
+      if (v.opsMethod === "token") { if (!v.opsToken) need.push("VCF Operations token"); }
+      else { if (!v.opsUsername) need.push("VCF Operations username"); if (!v.opsPassword) need.push("VCF Operations password"); }
+    }
+    return need;
+  }
+
+  // ---- Running a step
+  function startRun(action, btn) {
+    if (activeJob) { return; }
+    var body = collect(action);
+    if (action === "load-apply") {
+      if (body.values.confirm !== "yes") { stepMsg(4, "Type yes in the box first.", "bad"); return; }
+    }
+    if (action.indexOf("sync-") === 0) { body.engine = "powershell"; }
+    var missing = missingFor(action, body.values);
+    var step = stepOf(action);
+    if (missing.length) { stepMsg(step, "Fill in: " + missing.join(", ") + ".", "bad"); return; }
+    if (!body.folder) { stepMsg(step, "Set the output folder in Setup first.", "bad"); return; }
+    savePrefs();
+    setBusy(true, action);
+    var msgEl = stepMsgEl(step);
+    setText(msgEl, "Starting...");
+    msgEl.className = "msg";
+    var dryValues = { scope: body.values.scope, only: body.values.only.join("\n"), importFile: body.values.importFile };
+    api("/api/jobs", { method: "POST", body: body }).then(function (r) {
+      activeJob = { id: r.id, action: action, after: 0, timer: null, values: dryValues, found: [] };
+      drawerStart(TITLES[action] || action, CONSOLE_ACTIONS[action]);
+      document.body.classList.add("drawer-open");
+      poll();
+      if (CONSOLE_ACTIONS[action]) {
+        stepMsg(step, "A PowerShell window opened. Answer its questions there.", "warn");
+      } else {
+        setText(msgEl, "Running. The output is in the drawer at the bottom.");
+      }
+    }).catch(function (e) {
+      setBusy(false);
+      stepMsg(step, e.message, "bad");
+    });
+  }
+  function stepOf(action) {
+    var keys = Object.keys(STEP_ACTIONS);
+    for (var i = 0; i < keys.length; i++) { if (STEP_ACTIONS[keys[i]].indexOf(action) >= 0) return Number(keys[i]); }
+    if (action.indexOf("sync-") === 0) return 0;
+    if (action.indexOf("export-") === 0) return 1;
+    return 2;
+  }
+  function stepMsgEl(step) { return $("#step-" + step + " [data-msg]"); }
+  function stepMsg(step, text, kind) {
+    var el = stepMsgEl(step);
+    setText(el, text);
+    el.className = "msg" + (kind ? " " + kind : "");
+  }
+
+  function poll() {
+    if (!activeJob) return;
+    var job = activeJob;
+    api("/api/jobs/" + job.id + "?after=" + job.after).then(function (r) {
+      (r.lines || []).forEach(function (ln) {
+        drawerLine(ln.s, ln.t);
+        if (job.action === "export-domains" && ln.s === "out") {
+          var m = /^DOMAIN: (.+) \| users (\d+) \| groups (\d+)$/.exec(ln.t || "");
+          if (m) job.found.push({ name: m[1], users: Number(m[2]), groups: Number(m[3]) });
+        }
+      });
+      job.after = r.next;
+      if (r.status === "running") {
+        job.timer = setTimeout(poll, 700);
+      } else {
+        drawerEnd(r);
+      }
+    }).catch(function (e) {
+      drawerLine("sys", "Lost the connection to the UI server: " + e.message);
+      job.timer = setTimeout(poll, 2000);
+    });
+  }
+  function drawerEnd(r) {
+    var finished = activeJob;
+    var action = finished.action;
+    var step = stepOf(action);
+    var ok = r.status === "done" && r.exitCode === 0;
+    var pill = $("#drawer-pill");
+    if (r.status === "console") {
+      pill.className = "pill"; setText(pill, "Opened in a console window");
+    } else {
+      pill.className = "pill " + (ok ? "ok" : "bad");
+      setText(pill, ok ? "Finished" : (r.status === "cancelled" ? "Cancelled" : "Failed, exit code " + r.exitCode));
+    }
+    $("#btn-cancel").hidden = true;
+    drawerLine("sys", ok ? "Done." : (r.status === "cancelled" ? "Cancelled." : "The step did not finish. Read the lines above for the reason."));
+    activeJob = null;
+    setBusy(false);
+    if (r.status !== "console") {
+      if (ok) stepMsg(step, "Done. " + (step === 3 ? "Nothing was created." : ""), "ok");
+      else stepMsg(step, "The step failed. The reason is in the output drawer.", "bad");
+    }
+    if (ok && action === "load-dry") { lastDry = finished.values; }
+    if (ok && action === "export-domains") { setDomains(finished.found || []); }
+    loadJobs();
+    loadInfo();
+  }
+
+  // ---- Drawer
+  function setDomains(list) {
+    domainState.found = list;
+    domainState.picked = {};
+    list.forEach(function (d) { domainState.picked[d.name] = true; });
+    renderDomains();
+    savePrefs();
+    if (list.length) stepMsg(1, "Found " + list.length + " domain(s). Untick any you want to leave out.", "ok");
+    else stepMsg(1, "No domains were found. Check the login, then try again.", "bad");
+  }
+  function renderDomains() {
+    var box = $("#domain-list");
+    var items = $("#domain-items");
+    items.textContent = "";
+    box.hidden = domainState.found.length === 0;
+    domainState.found.forEach(function (d) {
+      var label = document.createElement("label");
+      label.className = "choice";
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !!domainState.picked[d.name];
+      cb.addEventListener("change", function () { domainState.picked[d.name] = cb.checked; savePrefs(); });
+      var span = document.createElement("span");
+      span.textContent = d.name;
+      var small = document.createElement("small");
+      small.textContent = d.users + " users, " + d.groups + " groups";
+      span.appendChild(small);
+      label.appendChild(cb);
+      label.appendChild(span);
+      items.appendChild(label);
+    });
+  }
+  function drawerStart(title, isConsole) {
+    setText($("#drawer-title"), title);
+    var pill = $("#drawer-pill"); pill.className = "pill running"; setText(pill, isConsole ? "Opening a window" : "Running");
+    $("#btn-cancel").hidden = !!isConsole;
+    $("#log").textContent = "";
+    var d = $("#drawer"); d.classList.remove("collapsed"); setToggle(true);
+    drawerLine("sys", "Started. Nothing is sent anywhere else; the script runs on this computer.");
+  }
+  function drawerLine(stream, text) {
+    var log = $("#log");
+    var span = document.createElement("span");
+    span.className = stream === "err" ? "err" : (stream === "sys" ? "sys" : "");
+    span.textContent = text + "\n";
+    log.appendChild(span);
+    log.scrollTop = log.scrollHeight;
+  }
+  function setToggle(open) {
+    var d = $("#drawer");
+    $("#btn-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+    setText($("#btn-toggle"), open ? "Hide output" : "Show output");
+    if (!open) d.classList.add("collapsed");
+    document.body.classList.toggle("drawer-open", open);
+  }
+
+  // ---- Busy state
+  function setBusy(busy) {
+    document.body.setAttribute("data-busy", busy ? "1" : "0");
+    $all("[data-run]").forEach(function (b) {
+      b.disabled = busy || !info;
+    });
+    if (!busy) updateApply();
+  }
+
+  // ---- Stepper state from the server's job history
+  function applyStepStates() {
+    // Jobs arrive newest first. The newest finished job of a step's own actions decides that step.
+    var states = { 0: "todo", 1: "todo", 2: "todo", 3: "todo", 4: "todo" };
+    var decided = {};
+    jobs.forEach(function (j) {
+      var step = stepOf(j.action);
+      if (decided[step] || j.status === "running" || j.status === "console") return;
+      if (!STEP_ACTIONS[step] || STEP_ACTIONS[step].indexOf(j.action) < 0) return;
+      decided[step] = true;
+      states[step] = (j.status === "done" && j.exitCode === 0) ? "done" : "failed";
+    });
+    var next = null;
+    [1, 2, 3, 4].forEach(function (s) { if (!next && states[s] !== "done") next = s; });
+    for (var k = 0; k <= 4; k++) {
+      var li = $("#step-" + k);
+      li.classList.remove("done", "failed", "next");
+      if (states[k] === "done") li.classList.add("done");
+      if (states[k] === "failed") li.classList.add("failed");
+      if (k === next) li.classList.add("next");
+      var label = states[k] === "done" ? "Done" : (states[k] === "failed" ? "Last run failed" : (k === next ? "Next step" : (k === 0 ? "Optional" : "Not run yet")));
+      if (k === 0 && states[k] === "todo") label = "Optional, not run";
+      setText($("#step-" + k + " [data-state]"), label);
+    }
+    var doneCount = [0, 1, 2, 3, 4].filter(function (k) { return states[k] === "done"; }).length;
+    return { states: states, next: next, doneCount: doneCount };
+  }
+  function loadJobs() {
+    return api("/api/jobs").then(function (r) {
+      jobs = r.jobs || [];
+      applyStepStates();
+      // The newest successful dry run survives a page reload (the server keeps its scope and file).
+      var lastDryJob = jobs.filter(function (j) { return j.action === "load-dry" && j.status === "done" && j.exitCode === 0; })[0];
+      if (lastDryJob) { lastDry = { scope: lastDryJob.scope, only: lastDryJob.only, importFile: lastDryJob.importFile }; }
+      updateApply();
+    }).catch(function () { /* banner already shown */ });
+  }
+
+  // ---- Info (folder, files, scripts, engines)
+  function loadInfo() {
+    var folder = val("folder");
+    var q = folder ? "?folder=" + encodeURIComponent(folder) : "";
+    return api("/api/info" + q).then(function (r) {
+      info = r;
+      renderInfo();
+      setBusy(!!activeJob);
+    }).catch(function (e) {
+      setConnected(false);
+    });
+  }
+  function renderInfo() {
+    if (!info) return;
+    if (!val("folder") && info.folder) { $("#folder").value = info.folder; }
+    // Hosts and user names from environment variables fill only the empty fields (never passwords).
+    var defaultFields = { VRA_HOST: "vra-host", VRA_USERNAME: "vra-user", VRA_DOMAIN: "vra-domain",
+      VCFA_HOST: "vcfa-host", VCFA_ORG: "vcfa-org", IDM_HOST: "idm-host", IDM_USERNAME: "idm-user",
+      VCFOPS_HOST: "ops-host", VCFOPS_USERNAME: "ops-user", VCFOPS_AUTHSOURCE: "ops-auth" };
+    Object.keys(defaultFields).forEach(function (k) {
+      var el = document.getElementById(defaultFields[k]);
+      if (el && !el.value && info.defaults && info.defaults[k]) { el.value = info.defaults[k]; }
+    });
+    setText($("#top-sub"), "Scripts in " + info.scriptDir);
+    var hint = $("#folder-hint");
+    if (!info.folderExists) setText(hint, "This folder does not exist yet. It is created when a step runs.");
+    else setText(hint, "Folder found.");
+    var py = info.engines.python;
+    var pyRadio = $("#engine-python");
+    pyRadio.disabled = !py.ok;
+    if (!py.ok && pyRadio.checked) { $('input[name="engine"][value="powershell"]').checked = true; }
+    var items = [
+      { ok: info.scripts.export, text: "Export-VraIdentity.ps1 and export_vra_identity.py found" },
+      { ok: info.scripts.load, text: "Import-Vcfa.ps1 and load_vcfa.py found" },
+      { ok: info.scripts.sync, text: "Sync-IdentitySource.ps1 found" },
+      { ok: info.scripts.template, text: info.scripts.template ? "report-template.html found (reports will be written)" : "report-template.html is missing next to the scripts. The scripts run, but they cannot write the HTML reports." },
+      { ok: info.engines.powershell.ok, text: info.engines.powershell.label },
+      { ok: py.ok, opt: !py.ok, text: py.ok ? py.label : "Python is not set up (" + py.label + "). PowerShell is used instead." }
+    ];
+    var ul = $("#checks"); ul.textContent = "";
+    items.forEach(function (it) {
+      var li = document.createElement("li");
+      var t = document.createElement("span");
+      t.className = "tick " + (it.opt ? "opt" : (it.ok ? "yes" : "no"));
+      t.textContent = it.opt ? "-" : (it.ok ? "\u2713" : "\u2717");
+      t.setAttribute("aria-hidden", "true");
+      var s = document.createElement("span"); s.textContent = it.text;
+      li.appendChild(t); li.appendChild(s); ul.appendChild(li);
+    });
+    // File buttons
+    var have = {};
+    (info.files || []).forEach(function (f) { have[f.name] = f.exists; });
+    $all("[data-open]").forEach(function (b) { b.disabled = !have[b.getAttribute("data-open")]; });
+    var imp = have["vcfa-import.json"];
+    setText($("#import-hint"), imp ? "Found vcfa-import.json in the output folder." : "No vcfa-import.json in the output folder yet. Run step 1 first, or choose another file.");
+    updateApply();
+  }
+
+  function openReport(name) {
+    api("/api/open", { method: "POST", body: { name: name, folder: val("folder") } }).catch(function (e) {
+      alert(e.message);
+    });
+  }
+
+  // ---- Apply gate (step 4)
+  function updateApply() {
+    var btn = $("#btn-apply");
+    var stale = $("#apply-stale");
+    var scope = radio("scope") || "free";
+    var only = scope === "only" ? listValues().join("\n") : "";
+    var file = val("import-file") || "vcfa-import.json";
+    var same = !!lastDry && lastDry.scope === scope && lastDry.only === only && lastDry.importFile === file;
+    stale.classList.toggle("hidden", !lastDry || same);
+    var sum = $("#apply-summary"); sum.textContent = "";
+    var rows = [
+      ["What to load", { free: "Everything needed", groups: "Groups only", users: "All users", only: "Only the names listed" }[scope]],
+      ["Import file", file],
+      ["Dry run", lastDry ? (same ? "Done for this scope" : "Done for a different scope") : "Not run yet"]
+    ];
+    rows.forEach(function (r) {
+      var dt = document.createElement("dt"); dt.textContent = r[0];
+      var dd = document.createElement("dd"); dd.textContent = r[1];
+      sum.appendChild(dt); sum.appendChild(dd);
+    });
+    var ready = !!lastDry && !!same && checked("apply-read") && val("confirm-yes") === "yes" && !!tokens.vcfa && !activeJob;
+    btn.disabled = !ready;
+  }
+
+  // ---- Wiring
+  function init() {
+    loadPrefs();
+    renderers.vcfa = bindToken("vcfa-tok-in", "vcfa", '[data-token-status="vcfa"]');
+    renderers.idm = bindToken("idm-tok-in", "idm", '[data-token-status="idm"]');
+    renderers.ops = bindToken("ops-tok-in", "ops", '[data-token-status="ops"]');
+
+    $all("[data-run]").forEach(function (b) {
+      b.addEventListener("click", function () { startRun(b.getAttribute("data-run"), b); });
+    });
+    $all("[data-open]").forEach(function (b) {
+      b.addEventListener("click", function () { openReport(b.getAttribute("data-open")); });
+    });
+    $("#btn-toggle").addEventListener("click", function () {
+      setToggle($("#drawer").classList.contains("collapsed"));
+    });
+    $("#btn-clear").addEventListener("click", function () {
+      if (activeJob) return;
+      $("#log").textContent = "";
+      setText($("#drawer-title"), "No step has run");
+      var pill = $("#drawer-pill"); pill.className = "pill hidden";
+    });
+    $("#btn-cancel").addEventListener("click", function () {
+      if (!activeJob) return;
+      api("/api/jobs/" + activeJob.id + "/cancel", { method: "POST", body: {} }).then(function () {
+        drawerLine("sys", "Cancel requested.");
+      }).catch(function (e) { alert(e.message); });
+    });
+    $("#btn-forget").addEventListener("click", function () {
+      ["vra-pass", "idm-pass", "ops-pass", "vcfa-tok-in", "idm-tok-in", "ops-tok-in", "confirm-yes"].forEach(function (id) {
+        var el = document.getElementById(id); if (el) el.value = "";
+      });
+      tokens.vcfa = ""; tokens.idm = ""; tokens.ops = "";
+      renderers.vcfa(); renderers.idm(); renderers.ops();
+      updateApply();
+      alert("Passwords and tokens are cleared from this page. Non-secret settings stay.");
+    });
+    $("#btn-stop").addEventListener("click", function () {
+      if (activeJob) { alert("A step is still running. Cancel it or wait for it to finish first."); return; }
+      if (!confirm("Stop the UI server? You will need to start Start-MigrationUI.ps1 again.")) return;
+      api("/api/shutdown", { method: "POST", body: {} }).then(function () {
+        setText($("#banner"), "The UI stopped. You can close this tab.");
+        $("#banner").classList.add("show");
+      }).catch(function (e) { alert(e.message); });
+    });
+
+    $all("input, textarea, select").forEach(function (el) {
+      el.addEventListener("change", function () { savePrefs(); updateApply(); });
+      if (el.id !== "vcfa-tok-in" && el.id !== "idm-tok-in" && el.id !== "ops-tok-in") {
+        el.addEventListener("input", function () { savePrefs(); updateApply(); });
+      }
+    });
+    $("#folder").addEventListener("change", loadInfo);
+    $("#folder").addEventListener("blur", loadInfo);
+    $all('input[name="scope"]').forEach(function (el) {
+      el.addEventListener("change", function () { $("#only-wrap").classList.toggle("hidden", radio("scope") !== "only"); updateApply(); });
+    });
+    $("#only-wrap").classList.toggle("hidden", radio("scope") !== "only");
+    $("#apply-read").addEventListener("change", updateApply);
+    $("#confirm-yes").addEventListener("input", updateApply);
+    $("#allow-missing").addEventListener("change", updateApply);
+    $all('input[name="idm-method"]').forEach(function (el) { el.addEventListener("change", showMethods); });
+    $all('input[name="ops-method"]').forEach(function (el) { el.addEventListener("change", showMethods); });
+    showMethods();
+
+    loadInfo().then(function () { return loadJobs(); }).then(function () {
+      // Resume watching a job that is still running (for example after a page reload).
+      var running = jobs.filter(function (j) { return j.status === "running"; })[0];
+      if (running) {
+        activeJob = { id: running.id, action: running.action, after: 0, timer: null };
+        drawerStart(TITLES[running.action] || running.action, false);
+        document.body.classList.add("drawer-open");
+        setBusy(true);
+        poll();
+      }
+      setBusy(!!activeJob);
+    });
+    setInterval(function () { if (!activeJob) { loadInfo(); } }, 15000);
+  }
+  function showMethods() {
+    var idmTok = radio("idm-method") === "token";
+    var opsTok = radio("ops-method") === "token";
+    $all(".idm-pw").forEach(function (e) { e.classList.toggle("hidden", idmTok); });
+    $all(".idm-tok").forEach(function (e) { e.classList.toggle("hidden", !idmTok); });
+    $all(".ops-pw").forEach(function (e) { e.classList.toggle("hidden", opsTok); });
+    $all(".ops-tok").forEach(function (e) { e.classList.toggle("hidden", !opsTok); });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+
+  // Exposed for tests only
+  window.__ui = { extractToken: extractToken, mask: mask };
+})();
+</script>
+</body>
+</html>
