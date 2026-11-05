@@ -62,6 +62,7 @@ $server = {
             '^GET /csp/gateway/am/api/orgs/org-1/groups/g2/users$' { $out = '{"results":[]}' }
             '^GET /iaas/api/projects$' { if ($iaasOk) { $out = '{"content":[{"id":"p1","name":"P1","administrators":[{"email":"aaron","type":"user"}],"members":[{"email":"adiel","type":"user"},{"email":"Infra@corp.example.com","type":"group"}]}]}' } else { $status = 401 } }
             '^GET /cloudapi/1.0.0/sessions/current$' { if ($vcfaOk) { $out = '{"org":{"name":"finance","id":"urn:vcloud:org:abc-123"},"roles":["Organization Administrator"]}' } else { $status = 401; $out = '{"message":"expired"}' } }
+            '^POST /oauth/tenant/finance/token$' { $out = '{"access_token":"' + ('t' * 30) + '"}' }
             '^GET /cloudapi/1.0.0/roles$' { $out = '{"values":' + $vcfaRoles + ',"pageCount":1}' }
             '^GET /cloudapi/1.0.0/users$' { $out = '{"values":[' + (($createdUsers | ForEach-Object { $_ }) -join ',') + '],"pageCount":1}' }
             '^GET /cloudapi/1.0.0/groups$' { $out = '{"values":[' + (($createdGroups | ForEach-Object { $_ }) -join ',') + '],"pageCount":1}' }
@@ -149,6 +150,15 @@ try {
     $env2 = @{ VCFA_HOST = $base; VCFA_ORG = 'finance'; VCFA_BROWSER_TOKEN = $token }
     $r = Invoke-Script $importScript '-BrowserToken -LoginOnly' $env2
     Assert-True ($r.Code -eq 0 -and $r.Out -like '*LOGIN OK. Org: name=finance*') 'load login only: ok'
+    $envApi = @{ VCFA_HOST = $base; VCFA_ORG = 'finance'; VCFA_API_TOKEN = 'my-refresh-token'; VCFA_BROWSER_TOKEN = '' }
+    $r = Invoke-Script $importScript '-ApiToken -LoginOnly' $envApi
+    Assert-True ($r.Code -eq 0 -and $r.Out -like '*LOGIN OK. Org: name=finance*') 'load API token: login works through the token exchange'
+    $ex = @(Get-Content -LiteralPath $logPath -Encoding UTF8 | Where-Object { $_ -like 'POST /oauth/tenant/finance/token*' })
+    Assert-True ($ex.Count -ge 1 -and $ex[0] -like '*type=application/x-www-form-urlencoded*' -and $ex[0] -like '*grant_type=refresh_token*' -and $ex[0] -like '*refresh_token=my-refresh-token*') 'load API token: the exchange is a form request carrying the token'
+    foreach ($gone in '-Provider -LoginOnly', '-BearerFile x.txt -LoginOnly') {
+        $r = Invoke-Script $importScript $gone $env2
+        Assert-True ($r.Code -ne 0) "load: the removed option '$gone' is no longer accepted"
+    }
     $r = Invoke-Script $importScript '-BrowserToken -LoginOnly' @{ VCFA_HOST = $base; VCFA_ORG = 'finance'; VCFA_BROWSER_TOKEN = ('x' * 30) }
     Assert-True ($r.Code -eq 1 -and $r.Out -like '*probably expired*') 'load expired token: clear message'
 

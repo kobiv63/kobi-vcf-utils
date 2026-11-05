@@ -9,8 +9,9 @@ SESSION = {"org": {"name": "my-org", "id": "urn:vcloud:org:abc"}, "roles": ["Org
 
 class Wizard(unittest.TestCase):
     def run_main(self, argv, answers=(), tty=True, secret="tok" * 10):
-        with mock.patch("sys.argv", ["load_vcfa.py", *argv]),                 mock.patch("sys.stdin.isatty", return_value=tty),                 mock.patch("builtins.input", side_effect=list(answers)),                 mock.patch("getpass.getpass", return_value=secret),                 mock.patch.object(L, "bearer_login", return_value=({}, SESSION)) as bl,                 mock.patch.object(L, "login", return_value=({}, SESSION)),                 mock.patch.object(L, "get_all") as ga:
+        with mock.patch("sys.argv", ["load_vcfa.py", *argv]),                 mock.patch("sys.stdin.isatty", return_value=tty),                 mock.patch("builtins.input", side_effect=list(answers)),                 mock.patch("getpass.getpass", return_value=secret),                 mock.patch.object(L, "bearer_login", return_value=({}, SESSION)) as bl,                 mock.patch.object(L, "token_login", return_value=({}, SESSION)) as tl,                 mock.patch.object(L, "get_all") as ga:
             L.main()
+        self.tl = tl
         return bl, ga
 
     def test_login_only_flag_stops_before_reading_vcfa_objects(self):
@@ -55,6 +56,42 @@ class Wizard(unittest.TestCase):
             bl, ga = self.run_main(["--org", "my-org", "--browser-token", "--login-only"],
                                    ["", "", "", ""], tty=True, secret="pasted" * 5)
         self.assertEqual(bl.call_args.kwargs["text"], "pasted" * 5)
+
+    def test_api_token_flag_uses_the_token_exchange(self):
+        with mock.patch.dict("os.environ", {"VCFA_API_TOKEN": "api-secret", "VCFA_BROWSER_TOKEN": ""}):
+            bl, ga = self.run_main(["--org", "my-org", "--api-token", "--login-only"], tty=False)
+        self.tl.assert_called_once_with("api-secret", "my-org")
+        bl.assert_not_called()
+
+    def test_api_token_flag_prompts_when_token_missing(self):
+        with mock.patch.dict("os.environ", {"VCFA_API_TOKEN": "", "VCFA_BROWSER_TOKEN": ""}), \
+                mock.patch.object(L, "VCFA_API_TOKEN", ""):
+            self.run_main(["--org", "my-org", "--api-token", "--login-only"], ["", "", ""], tty=True, secret="pasted-api")
+        self.tl.assert_called_once_with("pasted-api", "my-org")
+
+    def test_wizard_offers_only_the_two_token_methods(self):
+        self.assertEqual([m for m, _ in L.AUTH_METHODS], ["browser", "api"])
+        with mock.patch.dict("os.environ", {"VCFA_API_TOKEN": "", "VCFA_BROWSER_TOKEN": ""}), \
+                mock.patch.object(L, "VCFA_API_TOKEN", ""):
+            bl, ga = self.run_main([], ["https://vcfa.example", "my-org", "", "", "2", "1", "", "1"], secret="a" * 12)
+        self.tl.assert_called_once_with("a" * 12, "my-org")
+        bl.assert_not_called()
+
+    def test_both_token_flags_are_refused(self):
+        with self.assertRaises(SystemExit):
+            self.run_main(["--org", "my-org", "--browser-token", "--api-token"], tty=False)
+
+    def test_no_login_method_stops_with_a_clear_message(self):
+        with mock.patch.dict("os.environ", {"VCFA_API_TOKEN": "", "VCFA_BROWSER_TOKEN": ""}), \
+                mock.patch.object(L, "VCFA_API_TOKEN", ""), mock.patch.object(L, "VCFA_BROWSER_TOKEN", ""), \
+                self.assertRaises(SystemExit) as cm:
+            self.run_main(["--org", "my-org", "--login-only"], tty=False)
+        self.assertIn("no login method", str(cm.exception))
+
+    def test_removed_options_are_rejected(self):
+        for flag in (["--provider"], ["--bearer-file", "x.txt"]):
+            with self.assertRaises(SystemExit):
+                self.run_main(["--org", "my-org", *flag], tty=False)
 
     def test_apply_needs_typed_yes(self):
         with mock.patch.object(L, "VCFA_BROWSER_TOKEN", ""), self.assertRaises(SystemExit):
