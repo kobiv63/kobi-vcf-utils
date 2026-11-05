@@ -6,7 +6,7 @@ Small utilities for VMware Cloud Foundation work. Each utility lives in its own 
 |---|---|---|
 | [`vra-vcfa-identity-migration`](vra-vcfa-identity-migration/) | Moves users, groups and roles from vRA 8 to VCF Automation (VCFA). Read-only export, safe dry run before anything is created, HTML reports. A browser page (`Start-MigrationUI.ps1`) runs the steps for you. Optional first step: `Sync-IdentitySource.ps1` adds missing AD base group DNs from IDM to the VCF Operations identity source. PowerShell (no installs) and Python | [HOWTO](vra-vcfa-identity-migration/HOWTO.md) |
 
-## vra-vcfa-identity-migration: main files
+## vra-vcfa-identity-migration: main files and how to run
 
 Moves identities from vRA 8.x to a VCF Automation (VCFA) org. Every script comes in two versions with the same logic and file formats: **PowerShell** (primary, nothing to install, Windows PowerShell 5.1 or 7) and **Python** (needs Python 3 and `requests`). Run all commands from inside `vra-vcfa-identity-migration\`.
 
