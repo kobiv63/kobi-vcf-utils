@@ -18,6 +18,3 @@ kobi-vcf-utils/
     ...                      scripts, tests, examples
 ```
 
-## Adding a utility
-
-Create a new folder at the top level named after what it does (`<source>-<target>-<what>`, lower case, hyphens). Give it a `HOWTO.md`, tests, and a `.gitignore` for anything it generates that should not be committed. Add a row to the table above. Work happens on short-lived branches and merges to `main` through a pull request; there is no long-lived branch per utility.
