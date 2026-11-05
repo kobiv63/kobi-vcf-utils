@@ -127,10 +127,6 @@ function Invoke-Api { param([string]$Method, [string]$Url, [hashtable]$Headers =
 $script:Calls = New-Object System.Collections.ArrayList
 $script:FakeApi = { param($m, $u, $h, $b) [void]$script:Calls.Add(@{ Method = $m; Url = $u; Headers = $h; Body = $b }); @{ Status = 200; Text = '{}'; Headers = @{ 'X-VMWARE-VCLOUD-ACCESS-TOKEN' = 'sess-token' }; Body = (J '{"org":{"name":"o","id":"urn:x:1"},"access_token":"at"}') } }
 $script:VcfaHost = 'https://v.local'
-$login = Connect-VcfaPassword 'u' 'p'
-Assert-Equal $login.Headers['Authorization'] 'Bearer sess-token' 'password login: token from response header'
-Assert-Equal $script:Calls[0].Url 'https://v.local/cloudapi/1.0.0/sessions' 'password login: sessions endpoint'
-Assert-Equal $script:Calls[0].Headers['Authorization'] ('Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('u:p'))) 'password login: basic auth, user as given'
 $script:Calls.Clear()
 $capture = "fetch('https://v.local/cloudapi/1.0.0/users', {headers: {`"authorization`": `"Bearer abcdefghijklmnopqrstuvwxyz`"}})"
 $login = Connect-VcfaBearer $capture 'test'
@@ -159,10 +155,6 @@ $login = Connect-VcfaApiToken 'api' 'my-org'
 Assert-True ($script:Calls[0].Url -like '*/oauth/tenant/my-org/token') 'api token: tenant exchange endpoint'
 Assert-Equal $login.Headers['Authorization'] 'Bearer at' 'api token: access token used'
 $script:Calls.Clear()
-$script:FakeApi = { param($m, $u, $h, $b) [void]$script:Calls.Add(@{ Method = $m; Url = $u }); if ($u -like '*oauth/provider*') { @{ Status = 200; Text = ''; Headers = @{}; Body = (J '{"access_token":"at"}') } } else { @{ Status = 200; Text = ''; Headers = @{}; Body = (J '{"values":[{"name":"my-org","id":"urn:vcloud:org:zzz"}]}') } } }
-$login = Connect-VcfaProvider 'api' 'my-org'
-Assert-Equal $login.Session['org']['id'] 'urn:vcloud:org:zzz' 'provider: org found by name'
-Assert-True ($script:Calls[1].Url -like '*filter=name%3D%3Dmy-org') 'provider: org filter is URL-encoded'
 Remove-Item Function:\Invoke-Api
 
 # ---- Token prompt -----------------------------------------------------------
@@ -212,8 +204,6 @@ function Invoke-Scenario {
             function Set-TlsPolicy([bool]$Verify) { $script:TlsAsked = $Verify; $script:VerifyTls = $Verify }
             function Connect-VcfaBearer([string]$Text, [string]$Source) { [void]$script:Logins.Add(@{ Kind = 'bearer'; Text = $Text; Source = $Source }); return @{ Headers = @{ Authorization = 'Bearer x' }; Session = $session } }
             function Connect-VcfaApiToken([string]$ApiToken, [string]$OrgName) { [void]$script:Logins.Add(@{ Kind = 'api'; Text = $ApiToken }); return @{ Headers = @{ Authorization = 'Bearer x' }; Session = $session } }
-            function Connect-VcfaProvider([string]$ApiToken, [string]$OrgName) { [void]$script:Logins.Add(@{ Kind = 'provider'; Text = $ApiToken }); return @{ Headers = @{ Authorization = 'Bearer x' }; Session = $session } }
-            function Connect-VcfaPassword([string]$User, [string]$Password) { [void]$script:Logins.Add(@{ Kind = 'password'; Text = "$User/$Password" }); return @{ Headers = @{ Authorization = 'Bearer x' }; Session = $session } }
             function Read-ImportFile([string]$Path) { $script:ImportRead = $Path; return $imp }
             function Get-AllVcfa([string]$Path, [hashtable]$Headers, [int]$PageSize = 128, [int]$MaxPages = 200) {
                 $script:ContextHeaders = $Headers
@@ -332,12 +322,25 @@ Assert-True ($r.Error -like '*not confirmed*') 'wizard: apply needs a typed yes'
 Assert-Equal @($r.Sent).Count 0 'wizard: nothing sent without the yes'
 $r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '1', $TOKEN, '', 'Infra@corp.local', '3', 'yes') -Env @{ VCFA_BROWSER_TOKEN = '' }
 Assert-Equal @($r.Sent).Count 1 'wizard: typed yes applies'
-$r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '5', '', '', '1', 'svc', 'pw') -Env @{ VCFA_BROWSER_TOKEN = '' }
-Assert-Equal $r.Logins[0].Text 'svc/pw' 'wizard: username and password method'
-$r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '4', 'ptok', '', '', '1') -Env @{ VCFA_BROWSER_TOKEN = '' }
-Assert-Equal $r.Logins[0].Kind 'provider' 'wizard: provider token method'
-$r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '3', 'atok', '', '', '1') -Env @{ VCFA_BROWSER_TOKEN = '' }
-Assert-Equal $r.Logins[0].Kind 'api' 'wizard: tenant API token method'
+$r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '2', 'atok', '', '', '1') -Env @{ VCFA_BROWSER_TOKEN = '' }
+Assert-Equal $r.Logins[0].Kind 'api' 'wizard: API token method'
+Assert-Equal $r.Logins[0].Text 'atok' 'wizard: pasted API token is used'
+Assert-Equal @($r.Prompts | Where-Object { $_ -like '*Browser session token*' -or $_ -like '*Username*' }).Count 0 'wizard: only the two token methods are offered'
+$r = Invoke-Scenario -Params @{ ApiToken = $true; LoginOnly = $true } -Env @{ VCFA_API_TOKEN = 'api-secret'; VCFA_BROWSER_TOKEN = '' }
+Assert-Equal $r.Error $null '-ApiToken: ok'
+Assert-Equal $r.Logins[0].Kind 'api' '-ApiToken: logs in with the API token'
+Assert-Equal $r.Logins[0].Text 'api-secret' '-ApiToken: the token from VCFA_API_TOKEN is used'
+$r = Invoke-Scenario -Params @{ ApiToken = $true; LoginOnly = $true } -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', 'pasted-api') -Env @{ VCFA_API_TOKEN = ''; VCFA_BROWSER_TOKEN = '' }
+Assert-Equal $r.Logins[0].Text 'pasted-api' '-ApiToken: asks for the token when it is not set'
+$r = Invoke-Scenario -Params @{ LoginOnly = $true } -Env @{ VCFA_API_TOKEN = 'env-api'; VCFA_BROWSER_TOKEN = '' }
+Assert-Equal $r.Logins[0].Kind 'api' 'no parameter: a token already in the environment is used (API token)'
+$r = Invoke-Scenario -Params @{ LoginOnly = $true } -Env @{ VCFA_BROWSER_TOKEN = $TOKEN; VCFA_API_TOKEN = '' }
+Assert-Equal $r.Logins[0].Kind 'bearer' 'no parameter: a token already in the environment is used (browser token)'
+$r = Invoke-Scenario -Params @{ LoginOnly = $true } -Env @{ VCFA_BROWSER_TOKEN = ''; VCFA_API_TOKEN = '' }
+Assert-True ($r.Error -like '*no login method*') 'no parameter and no token: stops and says what to add'
+Assert-Equal @($r.Logins).Count 0 'no login method: nothing was attempted'
+$r = Invoke-Scenario -Params @{ BrowserToken = $true; ApiToken = $true } -Env $env_bt
+Assert-True ($r.Error -like '*either -BrowserToken or -ApiToken*') '-BrowserToken with -ApiToken: refused'
 $r = Invoke-Scenario -Params @{} -Interactive $true -Answers @('dev.vcfa.local', 'my-org', '', '', '1', 'tok', '', '', '1') -Env @{ VCFA_BROWSER_TOKEN = '' }
 Assert-True (@($r.Prompts | Where-Object { $_ -like '*[[]https://vcfa.example.com]*' }).Count -eq 1) 'prompt: host default shown'
 Assert-True (@($r.Prompts | Where-Object { $_ -like '*Infra-Admins@corp.example.com*' }).Count -eq 1) 'prompt: name filter example shown'

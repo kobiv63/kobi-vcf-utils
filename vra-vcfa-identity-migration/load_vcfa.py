@@ -1,20 +1,21 @@
 """Load vcfa-import.json into VCF Automation (VCFA) via the cloudapi. DRY RUN unless you choose Apply.
 
     python load_vcfa.py                 # interactive: prompts for host, org, login method, action, filters
-    python load_vcfa.py --org my-org --browser-token                    # dry run, groups only (the default)
-    python load_vcfa.py --org my-org --browser-token --users            # groups and users
+    python load_vcfa.py --org my-org --browser-token                    # dry run, groups plus non-inherited users (the default)
+    python load_vcfa.py --org my-org --api-token --users                # all users, logging in with an API token
     python load_vcfa.py --org my-org --browser-token --only "My-Group@corp.example.com" --apply   # one group
     python load_vcfa.py --org my-org --browser-token --only "olga@corp.example.com" --apply       # one user
 
-Groups only unless you ask for users (--users, or name a user in --only). Project roles are never loaded.
+Default load: groups plus the users whose roles are not inherited from a group. --groups-only loads no users,
+--users loads every user, --only loads exactly the named group or user. Project roles are never loaded.
+Log in with a browser session token (--browser-token) or an API token (--api-token).
 With no flags you get an action menu: test login / dry run / apply. With any flag the action is a dry run
 unless --apply (or --login-only) is given. When stdin is not a terminal nothing is prompted.
 Reads vcfa-import.json from the current folder. Writes vcfa-plan.json (the exact requests) in dry-run.
-Defaults come from the env vars VCFA_HOST, VCFA_ORG, VCFA_USERNAME, VCFA_PASSWORD, VCFA_API_TOKEN,
+Defaults come from the env vars VCFA_HOST, VCFA_ORG, VCFA_API_TOKEN,
 VCFA_BROWSER_TOKEN or the constants below.
 """
 import argparse
-import base64
 import getpass
 import json
 import os
@@ -32,11 +33,9 @@ TIMEOUT = 30           # seconds per request (not asked); e.g. 120 for a slow ap
 API_VERSION = os.environ.get("VCFA_API_VERSION", "40.0")  # cloudapi version (not asked); e.g. "40.0" (env VCFA_API_VERSION)
 IMPORT_FILE = "vcfa-import.json"  # asked at the prompt (or --import-file); e.g. "example-vcfa-import.json"
 PLAN_FILE = "vcfa-plan.json"
-REPORT_FILE = "vcfa-load-report.html"  # the readable summary of the run is written here      # dry-run/apply plan is written here
-VCFA_API_TOKEN = ""  # for OIDC/SSO orgs: API token created in the VCFA UI (env VCFA_API_TOKEN); prompted if you pick that login method
-VCFA_BROWSER_TOKEN = ""  # browser session token, raw or a 'Copy as fetch' capture (env VCFA_BROWSER_TOKEN); prompted for the browser method
-VCFA_USERNAME = ""          # e.g. "configurationadmin" (env VCFA_USERNAME)
-VCFA_PASSWORD = ""          # leave empty to be prompted; never commit it (env VCFA_PASSWORD)
+REPORT_FILE = "vcfa-load-report.html"  # the readable summary of the run is written here
+VCFA_API_TOKEN = ""  # API token created in the VCFA UI (env VCFA_API_TOKEN); asked (hidden) if you use the API token method
+VCFA_BROWSER_TOKEN = ""  # browser session token, raw or a 'Copy as fetch' capture (env VCFA_BROWSER_TOKEN); asked for the browser method
 if not VERIFY_TLS:
     requests.packages.urllib3.disable_warnings()  # type: ignore[attr-defined]
 s = requests.Session()
@@ -123,29 +122,6 @@ def choose(label, options, default=1):
         print("  Enter one of the numbers above.")
 
 
-def credentials():
-    user = ask("VCFA username", os.environ.get("VCFA_USERNAME") or VCFA_USERNAME, example="configurationadmin")
-    pw = os.environ.get("VCFA_PASSWORD") or VCFA_PASSWORD or ask("VCFA password", secret=True)
-    if not (user and pw):
-        die("username and password are required")
-    return user, pw
-
-
-def login(user, pw, org):
-    """Tenant login (cloudapi sessions). Returns (headers, session_body)."""
-    basic = base64.b64encode(f"{user}:{pw}".encode()).decode()  # username is used as given; org is not appended
-    r = s.post(f"{VCFA_HOST}/cloudapi/1.0.0/sessions",
-               headers={"Authorization": f"Basic {basic}", "Accept": f"application/json;version={API_VERSION}"},
-               timeout=TIMEOUT)
-    if r.status_code not in (200, 201):
-        die(f"login failed ({r.status_code}): {r.text[:300]}")
-    token = r.headers.get("X-VMWARE-VCLOUD-ACCESS-TOKEN")
-    if not token:
-        die("login returned no X-VMWARE-VCLOUD-ACCESS-TOKEN header")
-    return {"Authorization": f"Bearer {token}", "Accept": f"application/json;version={API_VERSION}",
-            "Content-Type": "application/json"}, r.json()
-
-
 def token_login(api_token, org):
     """For OIDC/SSO orgs: exchange an API token (created in the UI) for an access token."""
     r = s.post(f"{VCFA_HOST}/oauth/tenant/{org}/token",
@@ -173,28 +149,13 @@ def bearer_login(path, org, text=None):
         die(f"no bearer token found in {path or 'VCFA_BROWSER_TOKEN'}")
     if re.search(r"\s", token):
         die(f"the text from {path or 'VCFA_BROWSER_TOKEN'} has spaces or line breaks and no 'authorization: Bearer ...' "
-            "header, so it is not a token. Copy only the token, or save the whole request to a file and use --bearer-file")
+            "header, so it is not a token. Copy only the token or the whole copied request")
     headers = {"Authorization": f"Bearer {token}", "Accept": f"application/json;version={API_VERSION}",
                "Content-Type": "application/json"}
     r = s.get(f"{VCFA_HOST}/cloudapi/1.0.0/sessions/current", headers=headers, timeout=TIMEOUT)
     if r.status_code != 200:
         die(f"browser token rejected ({r.status_code}) - it probably expired; capture a fresh one: {r.text[:200]}")
     return headers, r.json()
-
-
-def provider_login(api_token, org):
-    """System-org (provider) API token: exchange at /oauth/provider/token, then act inside `org` via tenant context."""
-    r = s.post(f"{VCFA_HOST}/oauth/provider/token",
-               data={"grant_type": "refresh_token", "refresh_token": api_token}, timeout=TIMEOUT)
-    if r.status_code != 200:
-        die(f"provider API token exchange failed ({r.status_code}): {r.text[:300]}")
-    headers = {"Authorization": f"Bearer {r.json()['access_token']}",
-               "Accept": f"application/json;version={API_VERSION}", "Content-Type": "application/json"}
-    r = s.get(f"{VCFA_HOST}/cloudapi/1.0.0/orgs", headers=headers, params={"filter": f"name=={org}"}, timeout=TIMEOUT)
-    if r.status_code != 200 or not r.json().get("values"):
-        die(f"could not find org '{org}' as provider ({r.status_code}): {r.text[:300]}")
-    o = r.json()["values"][0]
-    return headers, {"org": {"name": o["name"], "id": o["id"]}, "roles": ["(provider)"]}
 
 
 def get_all(path, headers, page_size=128, max_pages=200):
@@ -448,11 +409,8 @@ def import_names(limit=15):
 
 
 AUTH_METHODS = [
-    ("browser", "Browser session token (needed to create users/groups on SSO orgs)"),
-    ("file", "Browser token saved in a file (raw token or 'Copy as fetch' capture)"),
-    ("api", "Tenant API token"),
-    ("provider", "System-org (provider) API token"),
-    ("password", "Username and password"),
+    ("browser", "Browser session token"),
+    ("api", "API token"),
 ]
 ACTIONS = [
     ("login", "Test login only (checks host, org and credentials; changes nothing)"),
@@ -470,12 +428,10 @@ def main():
     ap.add_argument("--import-file", metavar="FILE", help=f"import file to read (default {IMPORT_FILE})")
     ap.add_argument("--login-only", action="store_true", help="only test the login and exit")
     ap.add_argument("--org", default=None, help="VCFA org/tenant name (prompted if not given)")
-    ap.add_argument("--provider", action="store_true",
-                    help="VCFA_API_TOKEN is a System-org (provider) token; act inside --org via tenant context")
-    ap.add_argument("--bearer-file", metavar="FILE",
-                    help="use a browser session token from FILE (raw token or a 'Copy as fetch' capture)")
     ap.add_argument("--browser-token", action="store_true",
-                    help="use the browser session token from VCFA_BROWSER_TOKEN (variable in this file, or env)")
+                    help="log in with a browser session token (asked, hidden, if VCFA_BROWSER_TOKEN is not set)")
+    ap.add_argument("--api-token", action="store_true",
+                    help="log in with an API token created in the VCFA UI (asked, hidden, if VCFA_API_TOKEN is not set)")
     ap.add_argument("--users", action="store_true",
                     help="load ALL users from the import file (default: groups plus only the users whose roles "
                          "are not inherited from their groups)")
@@ -487,6 +443,8 @@ def main():
     args = ap.parse_args()
     if args.users and args.groups_only:
         die("choose either --users (all users) or --groups-only, not both")
+    if args.browser_token and args.api_token:
+        die("choose either --browser-token or --api-token, not both")
     IMPORT_FILE = args.import_file or IMPORT_FILE
     no_flags = len(sys.argv) == 1  # plain "python load_vcfa.py": run the full wizard
 
@@ -503,20 +461,15 @@ def main():
 
     api_token = os.environ.get("VCFA_API_TOKEN") or VCFA_API_TOKEN
     browser_token = os.environ.get("VCFA_BROWSER_TOKEN") or VCFA_BROWSER_TOKEN
-    explicit = args.browser_token or args.bearer_file or args.provider
     if no_flags:
         method = choose("How do you want to log in?", AUTH_METHODS)
         if method == "browser":
             args.browser_token = True
             browser_token = ask("Paste the browser token (hidden; just the token, not the whole fetch)",
                                 browser_token, secret=True)
-        elif method == "file":
-            args.bearer_file = ask("Path to the token file", example="C:\\temp\\token.txt")
-        elif method in ("api", "provider"):
-            args.provider = method == "provider"
+        else:
+            args.api_token = True
             api_token = ask("Paste the API token (hidden)", api_token, secret=True)
-        else:  # password: ignore stored tokens so the username/password path is used
-            api_token = browser_token = ""
         what = choose("What to import?", [
             ("free", "Groups, plus users whose roles are not inherited from a group (recommended)"),
             ("none", "Groups only (users are then created at first SSO login)"),
@@ -533,30 +486,31 @@ def main():
         if args.apply and ask("Type 'yes' to really create objects in VCFA") != "yes":
             die("not confirmed; nothing was changed")
 
-    if args.browser_token or (browser_token and not api_token and not explicit):
+    # Pick the login method: a flag wins, otherwise whichever token is already set (API token first).
+    if not args.browser_token and not args.api_token:
+        if api_token:
+            args.api_token = True
+        elif browser_token:
+            args.browser_token = True
+        else:
+            die("no login method: add --browser-token or --api-token (or set VCFA_BROWSER_TOKEN or VCFA_API_TOKEN)")
+    if args.browser_token:
         if not browser_token:
             browser_token = ask("Paste the browser token (hidden; just the token, not the whole fetch)", secret=True)
         if not browser_token:
             die("--browser-token: no token given (paste it at the prompt, or set VCFA_BROWSER_TOKEN)")
         print(f"Logging in to {VCFA_HOST} with the browser session token ...")
         headers, session = bearer_login(None, args.org, text=browser_token)
-    elif args.bearer_file:
-        print(f"Logging in to {VCFA_HOST} with the browser session token from {args.bearer_file} ...")
-        headers, session = bearer_login(args.bearer_file, args.org)
-    elif api_token or args.provider:
+    else:
         api_token = api_token or ask("Paste the API token (hidden)", secret=True)
         if not api_token:
-            die("--provider: no API token given (paste it at the prompt, or set VCFA_API_TOKEN)")
+            die("--api-token: no token given (paste it at the prompt, or set VCFA_API_TOKEN)")
         print(f"Logging in to {VCFA_HOST} org '{args.org}' with an API token ...")
-        headers, session = (provider_login if args.provider else token_login)(api_token, args.org)
-    else:
-        user, pw = credentials()
-        print(f"Logging in to {VCFA_HOST} as {user} ...")
-        headers, session = login(user, pw, args.org)
+        headers, session = token_login(api_token, args.org)
     org = session.get("org") or {}
     org_ref = {"name": org.get("name", args.org), "id": org.get("id")}
     # The UI sends these two context headers on every call; the API rejects writes without them (403).
-    headers["x-vmware-vcloud-auth-context"] = "system" if args.provider else args.org
+    headers["x-vmware-vcloud-auth-context"] = args.org
     headers["x-vmware-vcloud-tenant-context"] = (org_ref["id"] or "").split(":")[-1]
     print(f"LOGIN OK. Org: {org_ref}  roles on session: {session.get('roles')}")
     if args.login_only:

@@ -9,6 +9,7 @@ Two PowerShell scripts. The first reads vRA (read only) and writes an import fil
 |---|---|
 | `Export-VraIdentity.ps1` | Reads vRA and writes `vcfa-import.json` (plus `vra-export.json`, `users.json`, `groups.json`) |
 | `Import-Vcfa.ps1` | Reads an import file and creates the groups, plus the users whose roles are not inherited from a group, in VCFA |
+| `Sync-IdentitySource.ps1` | Optional step 0. Makes sure the AD groups are provisioned in the VCF Operations identity source (adds missing base group DNs) |
 | `report-template.html` | The look of the HTML reports. Keep it next to the scripts |
 | `example-vcfa-import.json` | A tiny import file with one group, to try the loader safely |
 | `HOWTO.md` | This guide |
@@ -20,6 +21,44 @@ Two PowerShell scripts. The first reads vRA (read only) and writes an import fil
 Unblock-File .\*.ps1
 powershell -ExecutionPolicy Bypass -File .\Export-VraIdentity.ps1 login
 ```
+
+---
+
+## 0. Optional: provision the AD groups in VCF Operations first
+
+**Skip this if the groups were already moved to the VCF Operations identity source by hand.** VCFA only sees an AD group after VCF Operations provisions it ("directory group provisioning" in the identity source). `Sync-IdentitySource.ps1` compares the base group DNs set in IDM (Workspace ONE Access) with the ones in VCF Operations and adds the missing ones. It never removes or changes anything that is already there, and it is a dry run until you say otherwise. PowerShell only.
+
+You need an account for IDM and one for VCF Operations. It asks for the hosts (name only, `https://` is added), usernames and passwords (hidden). If a password login does not work it falls back to a browser token (copy any request as fetch and press Enter at the token prompt).
+
+**Check both logins (changes nothing):**
+```
+.\Sync-IdentitySource.ps1 login
+```
+
+**Compare IDM with VCF Operations (changes nothing):**
+```
+.\Sync-IdentitySource.ps1 compare
+```
+It lists the base DNs IDM needs, the ones VCF Operations has, and which are missing. Local IDM directories and nested groups are ignored.
+
+**Add the missing base DNs, with a menu:**
+```
+.\Sync-IdentitySource.ps1
+```
+Pick *All* (recommended) or one base DN, then *Dry run* (default) or *Write*. A dry run prints the plan and saves the current and planned profile; nothing is sent. Write needs you to type `yes`.
+
+**Add one base DN, or all missing, without the menu:**
+```
+.\Sync-IdentitySource.ps1 apply -AddBaseDn "CN=my-test-group,OU=Test,DC=corp,DC=local"
+.\Sync-IdentitySource.ps1 apply -AddBaseDn "CN=my-test-group,OU=Test,DC=corp,DC=local" -Apply
+.\Sync-IdentitySource.ps1 apply -AddAllMissing -Apply
+```
+Without `-Apply` it is a dry run. A single group is added as a chosen group; an OU or the domain root is added as "all groups under it", and the plan warns you about that. Before writing it saves `sync-profile-backup-*.json`, and afterwards it reads the profile back and prints `VERIFIED`. The groups show up after the next directory sync in VCF Operations.
+
+If the server refuses some read-only fields or an empty attribute mapping (normally `employeeID`), the script leaves out exactly those, says so, and sends once more. Everything else still has to be a pure addition or it stops.
+
+Settings can come from `$env:IDM_HOST`, `$env:IDM_USERNAME`, `$env:VCFOPS_HOST`, `$env:VCFOPS_USERNAME` and similar. The files it writes (`identity-sources.json`, the backups) contain directory data and are git-ignored.
+
 
 ---
 
@@ -46,7 +85,7 @@ It asks for the vRA host, username, password, domain and which domains to export
 
 ## 2. Load into VCFA
 
-You need a browser token (see "Getting the VCFA token" below). Every command asks for the VCFA host and org, and for the token if you did not set one.
+You need a browser token or an API token (see "Getting the VCFA token" below). The commands below use `-BrowserToken`; use `-ApiToken` instead to log in with an API token. Every command asks for the VCFA host and org, and for the token if you did not set one.
 
 **Test the login only:**
 ```
@@ -128,6 +167,10 @@ The reports contain user and group names from the customer environment. Do not s
 
 ## Getting the VCFA token
 
+You can log in with a **browser token** (`-BrowserToken`) or an **API token** (`-ApiToken`). Those are the only two methods.
+
+### Browser token
+
 Sign in to your VCFA org in the browser, open dev tools, go to the Network tab, right-click any `cloudapi` request and choose Copy, **Copy as fetch**. (Copy as cURL or as PowerShell work too.) The token expires within minutes, so run the load right away.
 
 **Easiest: let the script read the clipboard.** Right after the copy above, run the command. At the token prompt just press **Enter** on an empty line; the script reads the copied request from the clipboard and picks the token out of it. You never paste a long multi-line text into the window.
@@ -138,18 +181,26 @@ Browser token (paste ONLY the token, or just press Enter to read it from the cli
 
 **Do not paste the whole copied request into the prompt.** It spans many lines and PowerShell would take only the first one. If you paste, paste only the token (the long text after `Bearer `). Pasted text that is clearly not a token is refused with an explanation.
 
-Other ways to give the token, so it is not asked:
+To skip the question, set the token first:
 ```
 $env:VCFA_BROWSER_TOKEN = 'paste-the-token-here'
 .\Import-Vcfa.ps1 -BrowserToken -LoginOnly
 ```
-or save the whole copied request (or just the token) to a file and use `-BearerFile`:
-```
-.\Import-Vcfa.ps1 -BearerFile .\token.txt -LoginOnly
-```
-Delete the file when you are done. In the Python version the prompt has no clipboard option, so for a whole copied request use `--bearer-file`.
 
-Only this browser token can create groups and users. API tokens can read but get `403` on create.
+### API token
+
+Create an API token in the VCFA UI, then:
+```
+.\Import-Vcfa.ps1 -ApiToken -LoginOnly
+```
+The script asks for the token (input is hidden). To skip the question:
+```
+$env:VCFA_API_TOKEN = 'paste-the-token-here'
+.\Import-Vcfa.ps1 -ApiToken -LoginOnly
+```
+An API token does not expire within minutes like the browser token does, so it suits longer sessions. Treat it like a password and delete it in the VCFA UI when you are done.
+
+If you give neither `-BrowserToken` nor `-ApiToken`, the script uses a token it finds in `VCFA_API_TOKEN` or `VCFA_BROWSER_TOKEN`; with neither set it stops and tells you what to add.
 
 ---
 
@@ -178,12 +229,11 @@ Only this browser token can create groups and users. API tokens can read but get
 | `-LoginOnly` | Test the login and stop |
 | `-ImportFile FILE` | Read this file instead of `vcfa-import.json` |
 | `-Org NAME` | VCFA org (asked if missing) |
-| `-BrowserToken` | Log in with the browser token (asked if not set) |
-| `-BearerFile FILE` | Log in with a token saved in a file |
-| `-Provider` | The API token is a System-org (provider) token |
+| `-BrowserToken` | Log in with a browser token (asked if not set) |
+| `-ApiToken` | Log in with an API token (asked if not set) |
 | `-AllowMissingRoles` | Apply even if some roles are missing in VCFA |
 
-Other ways to log in: leave out the token parameters to use username and password, or set `$env:VCFA_API_TOKEN` for a tenant API token (add `-Provider` for a provider token). Settings can also come from `$env:VCFA_HOST`, `$env:VCFA_ORG`, `$env:VRA_HOST`, `$env:VRA_USERNAME`, `$env:VRA_DOMAIN` and similar; each prompt shows its default.
+Settings can also come from `$env:VCFA_HOST`, `$env:VCFA_ORG`, `$env:VRA_HOST`, `$env:VRA_USERNAME`, `$env:VRA_DOMAIN` and similar; each prompt shows its default.
 
 ## Troubleshooting
 
@@ -191,7 +241,7 @@ Other ways to log in: leave out the token parameters to use username and passwor
 |---|---|
 | vRA `Invalid username or password` | Wrong domain |
 | VCFA `401` | Token expired; get a new one |
-| VCFA `403` on create | You used an API token; use the browser token |
+| `no login method` | Add `-BrowserToken` or `-ApiToken` (or set `VCFA_BROWSER_TOKEN` / `VCFA_API_TOKEN`) |
 | `Roles not found in VCFA` | A role-map name does not exist in your org |
 | Group has no users in VCFA | Users have not signed in yet, or the IdP group name does not match |
 | `running scripts is disabled` | See the note at the top |
@@ -251,8 +301,7 @@ python -c "import json;print(*[g['name'] for g in json.load(open('vcfa-import.js
 | `--import-file FILE` | `-ImportFile FILE` |
 | `--org NAME` | `-Org NAME` |
 | `--browser-token` | `-BrowserToken` |
-| `--bearer-file FILE` | `-BearerFile FILE` |
-| `--provider` | `-Provider` |
+| `--api-token` | `-ApiToken` |
 | `--allow-missing-roles` | `-AllowMissingRoles` |
 
 Everything else in this guide (getting the token, roles, what is not migrated, troubleshooting) applies to both versions. Role names live in `ROLE_MAP` at the top of `export_vra_identity.py`. Settings can come from environment variables, for example `set VCFA_HOST=dev.vcfa.local` in cmd, or `$env:VCFA_HOST = 'dev.vcfa.local'` in PowerShell.

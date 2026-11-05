@@ -5,6 +5,7 @@
 .DESCRIPTION
     Same logic as load_vcfa.py, but pure PowerShell (Windows PowerShell 5.1 or 7).
     Run it with no arguments for the full wizard (host, org, login method, what to import, name filter, action).
+    Log in with a browser session token (-BrowserToken) or an API token (-ApiToken).
     With any parameter, only the missing values are asked and the action is a dry run unless -Apply (or -LoginOnly).
     By default it loads the groups plus the users whose roles are NOT inherited from a group they are in
     (users with no roles, or whose roles all come from their groups, are left to the IdP group claim).
@@ -20,10 +21,9 @@
     VCFA org (tenant) name. Asked if missing.
 .PARAMETER BrowserToken
     Log in with a browser session token (asked, hidden, if not set in VCFA_BROWSER_TOKEN).
-.PARAMETER BearerFile
-    Log in with a browser token saved in a file (raw token or a 'Copy as fetch' capture).
-.PARAMETER Provider
-    The API token is a System-org (provider) token; act inside -Org via tenant context.
+    Press Enter at the prompt to read it from the clipboard.
+.PARAMETER ApiToken
+    Log in with an API token created in the VCFA UI (asked, hidden, if not set in VCFA_API_TOKEN).
 .PARAMETER Users
     Load ALL users from the import file (default: groups plus only the users whose roles are not inherited from groups).
 .PARAMETER GroupsOnly
@@ -45,7 +45,7 @@
     .\Import-Vcfa.ps1 -BrowserToken -Only 'Infra-Admins@corp.example.com' -Apply
 
 .NOTES
-    Defaults come from the env vars VCFA_HOST, VCFA_ORG, VCFA_USERNAME, VCFA_PASSWORD, VCFA_API_TOKEN,
+    Defaults come from the env vars VCFA_HOST, VCFA_ORG, VCFA_API_TOKEN,
     VCFA_BROWSER_TOKEN, VCFA_API_VERSION or the settings below. When input is redirected nothing is prompted.
     If scripts are blocked:  powershell -ExecutionPolicy Bypass -File .\Import-Vcfa.ps1
 #>
@@ -56,9 +56,8 @@ param(
     [string]$ImportFile,
     [switch]$LoginOnly,
     [string]$Org,
-    [switch]$Provider,
-    [string]$BearerFile,
     [switch]$BrowserToken,
+    [switch]$ApiToken,
     [switch]$Users,
     [switch]$GroupsOnly,
     [string[]]$Only = @()
@@ -80,17 +79,12 @@ if ($env:VCFA_API_VERSION) { $script:ApiVersion = $env:VCFA_API_VERSION }
 $script:ImportPath = 'vcfa-import.json'   # asked at the prompt (or -ImportFile); e.g. 'example-vcfa-import.json'
 $script:PlanFile = 'vcfa-plan.json'       # dry-run/apply plan is written here
 $script:ReportFile = 'vcfa-load-report.html'   # the readable summary of the run is written here
-$script:ApiToken = ''       # for OIDC/SSO orgs: API token created in the VCFA UI (env VCFA_API_TOKEN); prompted if you pick that login method
-$script:BrowserTokenValue = ''   # browser session token, raw or a 'Copy as fetch' capture (env VCFA_BROWSER_TOKEN); prompted for the browser method
-$script:VcfaUsername = ''   # e.g. 'configurationadmin' (env VCFA_USERNAME)
-$script:VcfaPassword = ''   # leave empty to be prompted; never commit it (env VCFA_PASSWORD)
+$script:ApiTokenValue = ''   # API token created in the VCFA UI (env VCFA_API_TOKEN); asked (hidden) if you use the API token method
+$script:BrowserTokenValue = ''   # browser session token, raw or a 'Copy as fetch' capture (env VCFA_BROWSER_TOKEN); asked for the browser method
 
 $script:AuthMethods = @(
-    @{ Value = 'browser'; Text = 'Browser session token (needed to create users/groups on SSO orgs)' },
-    @{ Value = 'file'; Text = "Browser token saved in a file (raw token or 'Copy as fetch' capture)" },
-    @{ Value = 'api'; Text = 'Tenant API token' },
-    @{ Value = 'provider'; Text = 'System-org (provider) API token' },
-    @{ Value = 'password'; Text = 'Username and password' }
+    @{ Value = 'browser'; Text = 'Browser session token' },
+    @{ Value = 'api'; Text = 'API token' }
 )
 $script:Actions = @(
     @{ Value = 'login'; Text = 'Test login only (checks host, org and credentials; changes nothing)' },
@@ -380,30 +374,12 @@ function Read-BrowserToken([string]$Default = '') {
     $clip = ''
     try { $clip = [string](Get-Clipboard -Raw) } catch { $clip = '' }
     if ($clip.Trim()) { Write-Host '  Read the token from the clipboard.'; return $clip }
-    Write-Host '  The clipboard is empty. Copy the request in the browser first, or save it to a file and use -BearerFile.'
+    Write-Host '  The clipboard is empty. Copy the request in the browser first.'
     return ''
 }
 
-function Get-Credentials {
-    $user = Read-Value 'VCFA username' (First-Set $env:VCFA_USERNAME $script:VcfaUsername) -Example 'configurationadmin'
-    $pw = First-Set $env:VCFA_PASSWORD $script:VcfaPassword
-    if (-not $pw) { $pw = Read-Value 'VCFA password' -Secret }
-    if (-not ($user -and $pw)) { Die 'username and password are required' }
-    return @{ User = $user; Password = $pw }
-}
-
-function Connect-VcfaPassword([string]$User, [string]$Password) {
-    # Tenant login (cloudapi sessions). The user name is used as given; the org is not appended.
-    $basic = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("${User}:$Password"))
-    $r = Invoke-Api POST "$($script:VcfaHost)/cloudapi/1.0.0/sessions" @{ Authorization = "Basic $basic"; Accept = "application/json;version=$($script:ApiVersion)" }
-    if ($r.Status -notin @(200, 201)) { Die "login failed ($($r.Status)): $(Short $r.Text)" }
-    $token = Get-HeaderValue $r.Headers 'X-VMWARE-VCLOUD-ACCESS-TOKEN'
-    if (-not $token) { Die 'login returned no X-VMWARE-VCLOUD-ACCESS-TOKEN header' }
-    return @{ Headers = (New-VcfaHeaders $token); Session = $r.Body }
-}
-
 function Connect-VcfaApiToken([string]$ApiToken, [string]$OrgName) {
-    # For OIDC/SSO orgs: exchange an API token (created in the UI) for an access token.
+    # Exchange an API token (created in the VCFA UI) for an access token.
     $r = Invoke-Api POST "$($script:VcfaHost)/oauth/tenant/$OrgName/token" @{} @{ grant_type = 'refresh_token'; refresh_token = $ApiToken }
     if ($r.Status -ne 200) { Die "API token exchange failed ($($r.Status)): $(Short $r.Text)" }
     $headers = New-VcfaHeaders $r.Body['access_token']
@@ -426,24 +402,12 @@ function Connect-VcfaBearer([string]$Text, [string]$Source) {
     $token = Get-BearerToken $Text
     if (-not $token -or $token.Length -lt 20) { Die "no bearer token found in $Source" }
     if ($token -match '\s') {
-        Die "the text from $Source has spaces or line breaks and no 'authorization: Bearer ...' header, so it is not a token. Copy only the token, or copy the whole request and press Enter at the token prompt (reads the clipboard), or save it to a file and use -BearerFile"
+        Die "the text from $Source has spaces or line breaks and no 'authorization: Bearer ...' header, so it is not a token. Copy only the token, or copy the whole request and press Enter at the token prompt (reads the clipboard)"
     }
     $headers = New-VcfaHeaders $token
     $r = Invoke-Api GET "$($script:VcfaHost)/cloudapi/1.0.0/sessions/current" $headers
     if ($r.Status -ne 200) { Die "browser token rejected ($($r.Status)) - it probably expired; capture a fresh one: $(Short $r.Text 200)" }
     return @{ Headers = $headers; Session = $r.Body }
-}
-
-function Connect-VcfaProvider([string]$ApiToken, [string]$OrgName) {
-    # System-org (provider) API token: exchange at /oauth/provider/token, then act inside the org via tenant context.
-    $r = Invoke-Api POST "$($script:VcfaHost)/oauth/provider/token" @{} @{ grant_type = 'refresh_token'; refresh_token = $ApiToken }
-    if ($r.Status -ne 200) { Die "provider API token exchange failed ($($r.Status)): $(Short $r.Text)" }
-    $headers = New-VcfaHeaders $r.Body['access_token']
-    $filter = [uri]::EscapeDataString("name==$OrgName")
-    $r = Invoke-Api GET "$($script:VcfaHost)/cloudapi/1.0.0/orgs?filter=$filter" $headers
-    if ($r.Status -ne 200 -or -not $r.Body['values']) { Die "could not find org '$OrgName' as provider ($($r.Status)): $(Short $r.Text)" }
-    $o = @($r.Body['values'])[0]
-    return @{ Headers = $headers; Session = @{ org = @{ name = $o['name']; id = $o['id'] }; roles = @('(provider)') } }
 }
 
 function Get-AllVcfa([string]$Path, [hashtable]$Headers, [int]$PageSize = 128, [int]$MaxPages = 200) {
@@ -779,9 +743,10 @@ function First-Set { foreach ($a in $args) { if ($a) { return $a } }; return '' 
 function Main {
     $noFlags = $script:NoFlags
     if ($Users -and $GroupsOnly) { Die 'choose either -Users (all users) or -GroupsOnly, not both' }
+    if ($BrowserToken -and $ApiToken) { Die 'choose either -BrowserToken or -ApiToken, not both' }
     $groupsOnly = [bool]$GroupsOnly
     $org = $Org; $withUsers = [bool]$Users; $only = @($Only | Where-Object { $_ })
-    $useBrowser = [bool]$BrowserToken; $bearerFile = $BearerFile; $useProvider = [bool]$Provider
+    $useBrowser = [bool]$BrowserToken; $useApi = [bool]$ApiToken
     $loginOnly = [bool]$LoginOnly; $apply = [bool]$Apply
     if ($ImportFile) { $script:ImportPath = $ImportFile }
 
@@ -791,21 +756,18 @@ function Main {
     if (-not $ImportFile) { $script:ImportPath = Read-Value 'Import file to load' $script:ImportPath -Example 'vcfa-import.json' }
     if (-not $org) { Die 'set the tenant with -Org <name> or VCFA_ORG' }
 
-    $apiToken = First-Set $env:VCFA_API_TOKEN $script:ApiToken
+    $apiTokenText = First-Set $env:VCFA_API_TOKEN $script:ApiTokenValue
     $tokenText = First-Set $env:VCFA_BROWSER_TOKEN $script:BrowserTokenValue
-    $explicit = $useBrowser -or $bearerFile -or $useProvider
     if ($noFlags) {
         $method = Select-Option 'How do you want to log in?' $script:AuthMethods
         if ($method -eq 'browser') {
             $useBrowser = $true
             $tokenText = Read-BrowserToken $tokenText
         }
-        elseif ($method -eq 'file') { $bearerFile = Read-Value 'Path to the token file' -Example 'C:\temp\token.txt' }
-        elseif ($method -in @('api', 'provider')) {
-            $useProvider = ($method -eq 'provider')
-            $apiToken = Read-Value 'Paste the API token (hidden)' $apiToken -Secret
+        else {
+            $useApi = $true
+            $apiTokenText = Read-Value 'Paste the API token (hidden)' $apiTokenText -Secret
         }
-        else { $apiToken = ''; $tokenText = '' }   # password: ignore stored tokens so the username/password path is used
         $what = Select-Option 'What to import?' @(
             @{ Value = 'free'; Text = 'Groups, plus users whose roles are not inherited from a group (recommended)' },
             @{ Value = 'none'; Text = 'Groups only (users are then created at first SSO login)' },
@@ -820,28 +782,23 @@ function Main {
         if ($apply -and (Read-Value "Type 'yes' to really create objects in VCFA") -ne 'yes') { Die 'not confirmed; nothing was changed' }
     }
 
-    if ($useBrowser -or ($tokenText -and -not $apiToken -and -not $explicit)) {
+    # Pick the login method: a parameter wins, otherwise whichever token is already set (API token first).
+    if (-not $useBrowser -and -not $useApi) {
+        if ($apiTokenText) { $useApi = $true }
+        elseif ($tokenText) { $useBrowser = $true }
+        else { Die 'no login method: add -BrowserToken or -ApiToken (or set VCFA_BROWSER_TOKEN or VCFA_API_TOKEN)' }
+    }
+    if ($useBrowser) {
         if (-not $tokenText) { $tokenText = Read-BrowserToken }
         if (-not $tokenText) { Die '-BrowserToken: no token given (paste it at the prompt, or set VCFA_BROWSER_TOKEN)' }
         Write-Host "Logging in to $($script:VcfaHost) with the browser session token ..."
         $login = Connect-VcfaBearer $tokenText 'VCFA_BROWSER_TOKEN'
     }
-    elseif ($bearerFile) {
-        Write-Host "Logging in to $($script:VcfaHost) with the browser session token from $bearerFile ..."
-        $full = Get-FullPath $bearerFile
-        if (-not (Test-Path -LiteralPath $full)) { Die "token file not found: $full" }
-        $login = Connect-VcfaBearer ([System.IO.File]::ReadAllText($full)) $bearerFile
-    }
-    elseif ($apiToken -or $useProvider) {
-        if (-not $apiToken) { $apiToken = Read-Value 'Paste the API token (hidden)' -Secret }
-        if (-not $apiToken) { Die '-Provider: no API token given (paste it at the prompt, or set VCFA_API_TOKEN)' }
-        Write-Host "Logging in to $($script:VcfaHost) org '$org' with an API token ..."
-        if ($useProvider) { $login = Connect-VcfaProvider $apiToken $org } else { $login = Connect-VcfaApiToken $apiToken $org }
-    }
     else {
-        $cred = Get-Credentials
-        Write-Host "Logging in to $($script:VcfaHost) as $($cred.User) ..."
-        $login = Connect-VcfaPassword $cred.User $cred.Password
+        if (-not $apiTokenText) { $apiTokenText = Read-Value 'Paste the API token (hidden)' -Secret }
+        if (-not $apiTokenText) { Die '-ApiToken: no token given (paste it at the prompt, or set VCFA_API_TOKEN)' }
+        Write-Host "Logging in to $($script:VcfaHost) org '$org' with an API token ..."
+        $login = Connect-VcfaApiToken $apiTokenText $org
     }
     $headers = $login.Headers
     $session = $login.Session
@@ -849,7 +806,7 @@ function Main {
     $orgName = $orgInfo['name']; if (-not $orgName) { $orgName = $org }
     $orgId = $orgInfo['id']
     # The UI sends these two context headers on every call; the API rejects writes without them (403).
-    $headers['x-vmware-vcloud-auth-context'] = if ($useProvider) { 'system' } else { $org }
+    $headers['x-vmware-vcloud-auth-context'] = $org
     $idText = if ($orgId) { [string]$orgId } else { '' }
     $headers['x-vmware-vcloud-tenant-context'] = $idText.Split(':')[-1]
     Write-Host "LOGIN OK. Org: name=$orgName id=$orgId  roles on session: $(@($session['roles']) -join ', ')"
